@@ -1,6 +1,8 @@
-var nano   = require('nano');
-var extend = require('xtend');
-var cookie = require('cookie');
+var nano       = require('nano');
+var extend     = require('xtend');
+var cookie     = require('cookie');
+
+var views  = require('./views');
 
 /**
  * Sails Boilerplate Adapter
@@ -47,7 +49,7 @@ var _modelReferences = {};
 // for your adapter (i.e. worst case scenario is a pool for each model, best case
 // scenario is one single single pool.)  For many databases, any change to
 // host OR database OR user OR password = separate pool.
-var _dbPools = {};
+var _dbs = {};
 
 
 var adapter = exports;
@@ -65,7 +67,7 @@ adapter.defaults = {
   port: 5984,
   host: 'localhost',
   https: false,
-  schema: true,
+  schema: false,
   syncable: true,
   autoPK: false,
 
@@ -102,10 +104,9 @@ adapter.registerCollection = function registerCollection(collection, cb) {
 
   var url = urlForConfig(collection.config);
   var db = nano(url).db.use(collection.identity);
-  collection._db = db;
 
-  // Keep a reference to this collection
   _modelReferences[collection.identity] = collection;
+  _dbs[collection.identity] = db;
 
   cb();
 };
@@ -158,10 +159,7 @@ adapter.describe = function describe(collectionName, cb) {
 
   // If you need to access your private data for this collection:
   var collection = _modelReferences[collectionName];
-
-  // Respond with the schema (attributes) for a collection or table in the data store
-  var attributes = {};
-  cb(null, attributes);
+  cb(null, collection.attributes);
 };
 
 
@@ -199,10 +197,50 @@ adapter.drop = function drop(collectionName, relations, cb) {
  * @param  {Function} cb             [description]
  * @return {[type]}                  [description]
  */
-adapter.find = function adapter(collectionName, options, cb) {
+adapter.find = find;
+
+function find(collectionName, options, cb) {
+  var args = arguments;
 
   // If you need to access your private data for this collection:
-  var collection = _modelReferences[collectionName];
+  var db = _dbs[collectionName];
+
+  var dbOptions = {};
+  if (options.limit) dbOptions.limit = options.limit;
+  if (options.skip) dbOptions.skip = options.skip;
+
+  var queriedAttributes = Object.keys(options.where);
+
+  if (queriedAttributes.length == 0) {
+    /// All docs
+    db.list(dbOptions, cb);
+  } else if (queriedAttributes.length == 1 &&  queriedAttributes[0] == '_id') {
+    /// One doc by id
+    db.get(options.where._id, function(err, doc) {
+      if (err) cb(err);
+      else {
+        var docs;
+        if (doc) docs = [doc];
+        else docs = [];
+        cb(null, docs);
+      }
+    });
+  } else {
+    db.view('views', views.name(options.where), dbOptions, viewResult);
+  }
+
+  function viewResult(err, reply) {
+    if (err && err.status_code == 404 && err.reason == 'missing_named_view')
+      views.create(db, options.where, createdView);
+    else if (err) cb(err);
+    else cb(null, reply.rows.map(prop('value')));
+  }
+
+  function createdView(err) {
+    console.log('CREATED VIEW', err);
+    if (err) cb(err);
+    else find.apply(adapter, args);
+  }
 
   // Options object is normalized for you:
   //
@@ -216,7 +254,7 @@ adapter.find = function adapter(collectionName, options, cb) {
   // If no matches were found, this will be an empty array.
 
   // Respond with an error, or the results.
-  cb(null, []);
+
 };
 
 
@@ -232,20 +270,15 @@ adapter.find = function adapter(collectionName, options, cb) {
 adapter.create = function create(collectionName, values, cb) {
   console.log(values);
   // If you need to access your private data for this collection:
-  var collection = _modelReferences[collectionName];
+  var db = _dbs[collectionName];
 
-  // Create a single new model (specified by `values`)
-  var db = collection._db;
   db.insert(values, replied);
-
-  // Respond with error or the newly-created record.
-  cb(null, values);
 
   function replied(err, reply) {
     if (err) cb(err);
     else {
       var attrs = extend({}, values, { _id: reply.id, _rev: reply.rev });
-      cb(attrs);
+      cb(null, attrs);
     }
   }
 };
@@ -265,19 +298,17 @@ adapter.create = function create(collectionName, values, cb) {
  */
 adapter.update = function update(collectionName, options, values, cb) {
 
-  // If you need to access your private data for this collection:
-  var collection = _modelReferences[collectionName];
+  var db = _dbs[collectionName];
 
-  // 1. Filter, paginate, and sort records from the datastore.
-  //    You should end up w/ an array of objects as a result.
-  //    If no matches were found, this will be an empty array.
-  //
-  // 2. Update all result records with `values`.
-  //
-  // (do both in a single query if you can-- it's faster)
+  db.insert(values, replied);
 
-  // Respond with error or an array of updated records.
-  cb(null, []);
+  function replied(err, reply) {
+    if (err) cb(err);
+    else {
+      var attrs = extend({}, values, { _id: reply.id, _rev: reply.rev });
+      cb(null, attrs);
+    }
+  }
 };
 
 
@@ -292,20 +323,9 @@ adapter.update = function update(collectionName, options, values, cb) {
  */
 adapter.destroy = function destroy(collectionName, options, cb) {
 
-  // If you need to access your private data for this collection:
-  var collection = _modelReferences[collectionName];
+  var db = _dbs[collectionName];
 
-
-  // 1. Filter, paginate, and sort records from the datastore.
-  //    You should end up w/ an array of objects as a result.
-  //    If no matches were found, this will be an empty array.
-  //
-  // 2. Destroy all result records.
-  //
-  // (do both in a single query if you can-- it's faster)
-
-  // Return an error, otherwise it's declared a success.
-  cb();
+  db.destroy(values._id, values._rev, cb);
 };
 
 
@@ -400,11 +420,11 @@ Sparrow.bar({test: 'yes'}, function (err, result){
 */
 
 
-/// Authenticaye
+/// Authenticate
 
 adapter.authenticate = function authenticate(collectionName, username, password, cb) {
-  var collection = _modelReferences[collectionName];
-  var db = collection._db;
+  var db = _dbs[collectionName];
+
   db.auth(username, password, replied);
 
   function replied(err, body, headers) {
@@ -416,8 +436,51 @@ adapter.authenticate = function authenticate(collectionName, username, password,
       cb(null, sessionId, username, body.roles);
     }
   }
-
 };
+
+
+/// Session
+
+adapter.session = function session(collectionName, sid, cb) {
+  var collection = _modelReferences[collectionName];
+
+  var sessionDb = nano({
+    url: urlForConfig(collection.config),
+    cookie: 'AuthSession=' + encodeURIComponent(sid)
+  });
+
+  sessionDb.session(cb);
+};
+
+
+
+/// Merge
+
+adapter.merge = function merge(collectionName, id, attrs, cb) {
+  var db = _dbs[collectionName];
+
+  db.get(id, got);
+
+  function got(err, doc) {
+    if (err) cb(err);
+    else {
+      extend(doc, attrs);
+      db.insert(doc, id, saved);
+    }
+
+    function saved(err, reply) {
+      if (err) cb(err);
+      else {
+        extend(doc, { _rev: reply.rev, _id: reply.id });
+        cb(null, doc);
+      }
+    }
+  }
+};
+
+
+
+/// Utils
 
 
 function urlForConfig(config) {
@@ -430,4 +493,10 @@ function urlForConfig(config) {
   }
 
   return [schema, '://', auth, config.host, ':', config.port, '/', config.database].join('');
+}
+
+function prop(p) {
+  return function(o) {
+    return o[p];
+  };
 }
