@@ -67,9 +67,13 @@ adapter.defaults = {
   port: 5984,
   host: 'localhost',
   https: false,
-  schema: false,
+  username: null,
+  password: null,
+
+  schema: true,
   syncable: true,
   autoPK: false,
+  pkFormat: 'string',
 
 
 
@@ -85,7 +89,7 @@ adapter.defaults = {
   // drop   => Drop schema and data, then recreate it
   // alter  => Drop/add columns as necessary.
   // safe   => Don't change anything (good for production DBs)
-  migrate: 'alter'
+  migrate: 'safe'
 };
 
 
@@ -102,13 +106,39 @@ adapter.registerCollection = function registerCollection(collection, cb) {
 
   console.log('REGISTER COLLECTION', collection);
 
+  collection.definition.id = {
+    type: 'string',
+    primaryKey: true
+  };
+
+  collection.definition.rev = {
+    type: 'string'
+  };
+
+  var args = arguments;
+
   var url = urlForConfig(collection.config);
-  var db = nano(url).db.use(collection.identity);
+  var db = nano(url);
 
-  _modelReferences[collection.identity] = collection;
-  _dbs[collection.identity] = db;
+  db.db.get(collection.identity, gotDatabase);
 
-  cb();
+  function gotDatabase(err) {
+    if (err && err.status_code == 404 && err.reason == 'no_db_file') {
+      db.db.create(collection.identity, createdDB);
+    } else {
+      db = db.db.use(collection.identity);
+
+      _modelReferences[collection.identity] = collection;
+      _dbs[collection.identity] = db;
+
+      cb();
+    }
+  }
+
+  function createdDB(err) {
+    if (err) cb(err);
+    else registerCollection.apply(adapter, args);
+  }
 };
 
 
@@ -121,7 +151,7 @@ adapter.registerCollection = function registerCollection(collection, cb) {
  * @return {[type]}      [description]
  */
 adapter.teardown = function teardown(cb) {
-  cb();
+  process.nextTick(cb);
 };
 
 
@@ -137,13 +167,9 @@ adapter.teardown = function teardown(cb) {
  */
 adapter.define = function define(collectionName, definition, cb) {
 
-  console.log('DEFINE', collectionName);
+  console.log('DEFINE', definition);
 
-  // If you need to access your private data for this collection:
-  var collection = _modelReferences[collectionName];
-
-  // Define a new "table" or "collection" schema in the data store
-  cb();
+  process.nextTick(cb);
 };
 
 /**
@@ -157,9 +183,11 @@ adapter.define = function define(collectionName, definition, cb) {
  */
 adapter.describe = function describe(collectionName, cb) {
 
+  console.log('DESCRIBE', collectionName);
+
   // If you need to access your private data for this collection:
   var collection = _modelReferences[collectionName];
-  cb(null, collection.attributes);
+  cb(null, collection.schema);
 };
 
 
@@ -175,11 +203,12 @@ adapter.describe = function describe(collectionName, cb) {
  * @return {[type]}                  [description]
  */
 adapter.drop = function drop(collectionName, relations, cb) {
+  console.log('DROP');
   // If you need to access your private data for this collection:
   var collection = _modelReferences[collectionName];
 
-  // Drop a "table" or "collection" schema from the data store
-  cb();
+  var db = _dbs[collectionName];
+  db.db.destroy(cb);
 };
 
 
@@ -200,6 +229,7 @@ adapter.drop = function drop(collectionName, relations, cb) {
 adapter.find = find;
 
 function find(collectionName, options, cb) {
+  console.log('FIND from %j, %j', collectionName, options);
   var args = arguments;
 
   // If you need to access your private data for this collection:
@@ -213,31 +243,38 @@ function find(collectionName, options, cb) {
 
   if (queriedAttributes.length == 0) {
     /// All docs
-    db.list(dbOptions, cb);
-  } else if (queriedAttributes.length == 1 &&  queriedAttributes[0] == '_id') {
+    db.list(dbOptions, listReplied);
+  } else if (queriedAttributes.length == 1 &&  queriedAttributes[0] == 'id') {
     /// One doc by id
-    db.get(options.where._id, function(err, doc) {
+    console.log('GETTING ONe BY ID');
+    db.get(options.where.id, dbOptions, function(err, doc) {
       if (err) cb(err);
       else {
         var docs;
         if (doc) docs = [doc];
         else docs = [];
-        cb(null, docs);
+        cb(null, docs.map(docForReply));
       }
     });
   } else {
-    db.view('views', views.name(options.where), dbOptions, viewResult);
+    var viewName = views.name(options.where);
+    var value = options.where[queriedAttributes[0]];
+    dbOptions.key = value;
+    db.view('views', viewName, dbOptions, viewResult);
+  }
+
+  function listReplied(err, docs) {
+    if (err) cb(err);
+    else cb(null, docs.map(docForReply));
   }
 
   function viewResult(err, reply) {
-    if (err && err.status_code == 404 && err.reason == 'missing_named_view')
-      views.create(db, options.where, createdView);
+    if (err && err.status_code == 404) views.create(db, options.where, createdView);
     else if (err) cb(err);
-    else cb(null, reply.rows.map(prop('value')));
+    else cb(null, reply.rows.map(prop('value')).map(docForReply));
   }
 
   function createdView(err) {
-    console.log('CREATED VIEW', err);
     if (err) cb(err);
     else find.apply(adapter, args);
   }
@@ -268,17 +305,17 @@ function find(collectionName, options, cb) {
  * @return {[type]}                  [description]
  */
 adapter.create = function create(collectionName, values, cb) {
-  console.log(values);
-  // If you need to access your private data for this collection:
+
+
   var db = _dbs[collectionName];
 
-  db.insert(values, replied);
+  db.insert(docForIngestion(values), replied);
 
   function replied(err, reply) {
     if (err) cb(err);
     else {
       var attrs = extend({}, values, { _id: reply.id, _rev: reply.rev });
-      cb(null, attrs);
+      cb(null, docForReply(attrs));
     }
   }
 };
@@ -298,15 +335,23 @@ adapter.create = function create(collectionName, values, cb) {
  */
 adapter.update = function update(collectionName, options, values, cb) {
 
+  var searchAttributes = Object.keys(options.where);
+  if (searchAttributes.length != 1) return cb(new Error('only support updating one object by id'));
+  if (searchAttributes[0] != 'id') return cb(new Error('only support updating one object by id'));
+
+  console.log('UPDATING', values, options);
+
+  values
+
   var db = _dbs[collectionName];
 
-  db.insert(values, replied);
+  db.insert(docForIngestion(values), options.where.id, replied);
 
   function replied(err, reply) {
     if (err) cb(err);
     else {
       var attrs = extend({}, values, { _id: reply.id, _rev: reply.rev });
-      cb(null, attrs);
+      cb(null, docForReply(attrs));
     }
   }
 };
@@ -323,9 +368,6 @@ adapter.update = function update(collectionName, options, values, cb) {
  */
 adapter.destroy = function destroy(collectionName, options, cb) {
 
-  var db = _dbs[collectionName];
-
-  db.destroy(values._id, values._rev, cb);
 };
 
 
@@ -459,6 +501,8 @@ adapter.session = function session(collectionName, sid, cb) {
 adapter.merge = function merge(collectionName, id, attrs, cb) {
   var db = _dbs[collectionName];
 
+  attrs = docForIngestion(attrs);
+
   db.get(id, got);
 
   function got(err, doc) {
@@ -472,7 +516,7 @@ adapter.merge = function merge(collectionName, id, attrs, cb) {
       if (err) cb(err);
       else {
         extend(doc, { _rev: reply.rev, _id: reply.id });
-        cb(null, doc);
+        cb(null, docForReply(doc));
       }
     }
   }
@@ -499,4 +543,37 @@ function prop(p) {
   return function(o) {
     return o[p];
   };
+}
+
+function docForReply(doc) {
+  console.log('<= (1)  %j', doc);
+  if (doc._id) {
+    doc.id = doc._id;
+    delete doc._id;
+  }
+  if (doc._rev) {
+    doc.rev = doc._rev;
+    delete doc._rev;
+  }
+  console.log('<= (2)  %j', doc);
+
+  return doc;
+}
+
+function docForIngestion(doc) {
+  console.log('=> (1) %j', doc);
+
+  doc = extend({}, doc);
+  if (doc.id) {
+    doc._id = doc.id;
+    delete doc.id;
+  }
+  if (doc.rev) {
+    doc._rev = doc.rev;
+    delete doc.rev;
+  }
+
+  console.log('=> (2) %j', doc);
+
+  return doc;
 }
