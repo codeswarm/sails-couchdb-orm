@@ -394,11 +394,16 @@ adapter.merge = function adapterMerge(collectionName, id, attrs, cb) {
 
   attrs = docForIngestion(attrs);
 
+  delete attrs._rev;
+
   db.get(id, got);
 
   function got(err, doc) {
     if (err) cb(err);
-    else db.insert(merge(doc, attrs), id, saved);
+    else {
+      var doc = merge(doc, attrs);
+      db.insert(doc, id, saved);
+    }
 
     function saved(err, reply) {
       if (err) cb(err);
