@@ -182,7 +182,6 @@ adapter.describe = function describe(collectionName, cb) {
  * @return {[type]}                  [description]
  */
 adapter.drop = function drop(collectionName, relations, cb) {
-  console.log('DROP');
   // If you need to access your private data for this collection:
   var collection = _modelReferences[collectionName];
 
@@ -208,6 +207,7 @@ adapter.drop = function drop(collectionName, relations, cb) {
 adapter.find = find;
 
 function find(collectionName, options, cb) {
+
   var args = arguments;
 
   // If you need to access your private data for this collection:
@@ -390,7 +390,6 @@ adapter.session = function session(collectionName, sid, cb) {
 /// Merge
 
 adapter.merge = function adapterMerge(collectionName, id, attrs, cb) {
-  console.log('adapter.merge', collectionName, id, attrs);
   var db = _dbs[collectionName];
 
   attrs = docForIngestion(attrs);
@@ -435,7 +434,6 @@ function prop(p) {
 }
 
 function docForReply(doc) {
-  console.log('<= (1)  %j', doc);
   if (doc._id) {
     doc.id = doc._id;
     delete doc._id;
@@ -444,14 +442,11 @@ function docForReply(doc) {
     doc.rev = doc._rev;
     delete doc._rev;
   }
-  console.log('<= (2)  %j', doc);
 
   return doc;
 }
 
 function docForIngestion(doc) {
-  console.log('=> (1) %j', doc);
-
   doc = extend({}, doc);
   if (doc.id) {
     doc._id = doc.id;
@@ -461,8 +456,6 @@ function docForIngestion(doc) {
     doc._rev = doc.rev;
     delete doc.rev;
   }
-
-  console.log('=> (2) %j', doc);
 
   return doc;
 }
