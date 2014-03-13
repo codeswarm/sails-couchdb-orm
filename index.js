@@ -115,6 +115,8 @@ adapter.defaults = {
  */
 adapter.registerCollection = function registerCollection(collection, cb) {
 
+  console.log('REGISTER COLLECTION', collection);
+
   var args = arguments;
 
   var url = urlForConfig(collection.config);
@@ -423,6 +425,55 @@ adapter.merge = function adapterMerge(collectionName, id, attrs, cb) {
     }
   }
 };
+
+
+
+/// View
+
+adapter.view = function view(collectionName, viewName, options, cb, round) {
+  console.log('view', collectionName, viewName, options)
+  if ('number' != typeof round) round = 0;
+  var db = _dbs[collectionName];
+
+  db.view('views', 'custom_' + viewName, options, viewResult);
+
+  function viewResult(err, results) {
+    if (err && err.status_code == 404 && err.reason == 'missing_named_view' && round < 1)
+      populateView(collectionName, viewName, populatedView);
+    else if (err) cb(err);
+    else cb(results.map(prop('value')));
+  }
+
+  function populatedView(err) {
+    if (err) cb(err);
+    else view.call(adapter, collectionName, viewName, options, cb, round + 1);
+  }
+};
+
+function populateView(collectionName, viewName, cb) {
+  var collection = _modelReferences[collectionName];
+
+  var view = collection.views && collection.views[viewName];
+  if (! view) return cb(new Error('No view named ' + viewName + ' defined in model ' + collectionName));
+  else {
+    var db = _dbs[collectionName];
+    db.get('_design/views', gotDDoc);
+  }
+
+  function gotDDoc(err, ddoc) {
+    var views = {};
+    views[viewName] = view;
+    ddoc = merge(ddoc || {}, {
+      views: views
+    });
+
+    db.insert('_design/views', insertedDDoc);
+  }
+
+  function insertedDDoc(err) {
+    cb(err);
+  }
+}
 
 
 
