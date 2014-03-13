@@ -27,7 +27,8 @@
     "nano": "~5.7.1",
     "xtend": "~2.1.2",
     "cookie": "~0.1.1",
-    "handlebars": "~2.0.0-alpha.2"
+    "handlebars": "~2.0.0-alpha.2",
+    "deep-merge": "~0.3.1"
   },
   "devDependencies": {
     "waterline-adapter-tests": "git://github.com/balderdashy/waterline-adapter-tests.git#associations",

@@ -1,6 +1,11 @@
 var nano       = require('nano');
 var extend     = require('xtend');
 var cookie     = require('cookie');
+var DeepMerge  = require('deep-merge');
+
+var merge = DeepMerge(function(a, b) {
+  return b;
+});
 
 var views  = require('./views');
 
@@ -60,6 +65,12 @@ var adapter = exports;
 adapter.syncable = false,
 
 
+// Reserved attributes.
+// These attributes get passed in to the `adapter.update` function even if they're not declared
+// in the model schema.
+adapter.reservedAttributes = ['id', 'rev'];
+
+
 // Default configuration for collections
 // (same effect as if these properties were included at the top level of the model definitions)
 adapter.defaults = {
@@ -103,17 +114,6 @@ adapter.defaults = {
  * @return {[type]}              [description]
  */
 adapter.registerCollection = function registerCollection(collection, cb) {
-
-  console.log('REGISTER COLLECTION', collection);
-
-  collection.definition.id = {
-    type: 'string',
-    primaryKey: true
-  };
-
-  collection.definition.rev = {
-    type: 'string'
-  };
 
   var args = arguments;
 
@@ -161,33 +161,12 @@ adapter.teardown = function teardown(cb) {
  * (SQL-ish) database.
  *
  * @param  {[type]}   collectionName [description]
- * @param  {[type]}   definition     [description]
- * @param  {Function} cb             [description]
- * @return {[type]}                  [description]
- */
-adapter.define = function define(collectionName, definition, cb) {
-
-  console.log('DEFINE', definition);
-
-  process.nextTick(cb);
-};
-
-/**
- *
- * REQUIRED method if integrating with a schemaful
- * (SQL-ish) database.
- *
- * @param  {[type]}   collectionName [description]
  * @param  {Function} cb             [description]
  * @return {[type]}                  [description]
  */
 adapter.describe = function describe(collectionName, cb) {
-
-  console.log('DESCRIBE', collectionName);
-
-  // If you need to access your private data for this collection:
   var collection = _modelReferences[collectionName];
-  cb(null, collection.schema);
+  cb(null, collection.definition);
 };
 
 
@@ -229,7 +208,6 @@ adapter.drop = function drop(collectionName, relations, cb) {
 adapter.find = find;
 
 function find(collectionName, options, cb) {
-  console.log('FIND from %j, %j', collectionName, options);
   var args = arguments;
 
   // If you need to access your private data for this collection:
@@ -246,7 +224,6 @@ function find(collectionName, options, cb) {
     db.list(dbOptions, listReplied);
   } else if (queriedAttributes.length == 1 &&  queriedAttributes[0] == 'id') {
     /// One doc by id
-    console.log('GETTING ONe BY ID');
     db.get(options.where.id, dbOptions, function(err, doc) {
       if (err) cb(err);
       else {
@@ -259,6 +236,7 @@ function find(collectionName, options, cb) {
   } else {
     var viewName = views.name(options.where);
     var value = options.where[queriedAttributes[0]];
+    if (! Array.isArray(value)) value = [value];
     dbOptions.key = value;
     db.view('views', viewName, dbOptions, viewResult);
   }
@@ -336,12 +314,10 @@ adapter.create = function create(collectionName, values, cb) {
 adapter.update = function update(collectionName, options, values, cb) {
 
   var searchAttributes = Object.keys(options.where);
-  if (searchAttributes.length != 1) return cb(new Error('only support updating one object by id'));
-  if (searchAttributes[0] != 'id') return cb(new Error('only support updating one object by id'));
-
-  console.log('UPDATING', values, options);
-
-  values
+  if (searchAttributes.length != 1)
+    return cb(new Error('only support updating one object by id'));
+  if (searchAttributes[0] != 'id')
+    return cb(new Error('only support updating one object by id'));
 
   var db = _dbs[collectionName];
 
@@ -372,94 +348,9 @@ adapter.destroy = function destroy(collectionName, options, cb) {
 
 
 
-/*
-**********************************************
-* Optional overrides
-**********************************************
-
-// Optional override of built-in batch create logic for increased efficiency
-// (since most databases include optimizations for pooled queries, at least intra-connection)
-// otherwise, Waterline core uses create()
-createEach: function (collectionName, arrayOfObjects, cb) { cb(); },
-
-// Optional override of built-in findOrCreate logic for increased efficiency
-// (since most databases include optimizations for pooled queries, at least intra-connection)
-// otherwise, uses find() and create()
-findOrCreate: function (collectionName, arrayOfAttributeNamesWeCareAbout, newAttributesObj, cb) { cb(); },
-*/
-
-
-/*
-**********************************************
-* Custom methods
-**********************************************
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-//
-// > NOTE:  There are a few gotchas here you should be aware of.
-//
-//    + The collectionName argument is always prepended as the first argument.
-//      This is so you can know which model is requesting the adapter.
-//
-//    + All adapter functions are asynchronous, even the completely custom ones,
-//      and they must always include a callback as the final argument.
-//      The first argument of callbacks is always an error object.
-//      For core CRUD methods, Waterline will add support for .done()/promise usage.
-//
-//    + The function signature for all CUSTOM adapter methods below must be:
-//      `function (collectionName, options, cb) { ... }`
-//
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-// Custom methods defined here will be available on all models
-// which are hooked up to this adapter:
-//
-// e.g.:
-//
-foo: function (collectionName, options, cb) {
-  return cb(null,"ok");
-},
-bar: function (collectionName, options, cb) {
-  if (!options.jello) return cb("Failure!");
-  else return cb();
-}
-
-// So if you have three models:
-// Tiger, Sparrow, and User
-// 2 of which (Tiger and Sparrow) implement this custom adapter,
-// then you'll be able to access:
-//
-// Tiger.foo(...)
-// Tiger.bar(...)
-// Sparrow.foo(...)
-// Sparrow.bar(...)
-
-
-// Example success usage:
-//
-// (notice how the first argument goes away:)
-Tiger.foo({}, function (err, result) {
-  if (err) return console.error(err);
-  else console.log(result);
-
-  // outputs: ok
-});
-
-// Example error usage:
-//
-// (notice how the first argument goes away:)
-Sparrow.bar({test: 'yes'}, function (err, result){
-  if (err) console.error(err);
-  else console.log(result);
-
-  // outputs: Failure!
-})
-
-
-
-
-*/
+/**********************************************
+ * Custom methods
+ **********************************************/
 
 
 /// Authenticate
@@ -498,7 +389,8 @@ adapter.session = function session(collectionName, sid, cb) {
 
 /// Merge
 
-adapter.merge = function merge(collectionName, id, attrs, cb) {
+adapter.merge = function adapterMerge(collectionName, id, attrs, cb) {
+  console.log('adapter.merge', collectionName, id, attrs);
   var db = _dbs[collectionName];
 
   attrs = docForIngestion(attrs);
@@ -507,10 +399,7 @@ adapter.merge = function merge(collectionName, id, attrs, cb) {
 
   function got(err, doc) {
     if (err) cb(err);
-    else {
-      extend(doc, attrs);
-      db.insert(doc, id, saved);
-    }
+    else db.insert(merge(doc, attrs), id, saved);
 
     function saved(err, reply) {
       if (err) cb(err);
@@ -577,3 +466,4 @@ function docForIngestion(doc) {
 
   return doc;
 }
+
