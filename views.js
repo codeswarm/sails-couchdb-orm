@@ -15,12 +15,42 @@ function viewName(where) {
 };
 
 
+/// Value
+
+exports.value = value;
+
+function value(options, isLike) {
+  return Object.keys(options).sort().map(function(key) {
+    return options[key];
+  });
+}
+
+exports.likeValue = likeValue;
+
+function likeValue(options) {
+  var startKey = [];
+  var endKey = [];
+  Object.keys(options).sort().forEach(function(key) {
+    var value = options[key];
+    if ('string' != typeof value) throw new Error('like value must be a string');
+    if (value.charAt(value.length - 1) == '%') value = value.substring(0, value.length - 1);
+    startKey.push(value);
+    endKey.push(value + '\ufff0');
+  });
+
+  return {
+    startkey: startKey,
+    endkey: endKey
+  };
+}
+
+
 /// Create
 
 exports.create = createView;
 
 function createView(db, where, cb) {
-  var attributes = Object.keys(where).sort();
+  var attributes = Object.keys(where).sort().map(fixAttributeName);
   var map = templates.map({
     attributes: attributes,
     attribute: attributes.length == 1 && attributes[0],
@@ -40,4 +70,9 @@ function createView(db, where, cb) {
 
     db.insert(ddoc, '_design/views', cb);
   }
+}
+
+function fixAttributeName(attrName) {
+  if (attrName == 'id') attrName = '_id';
+  return attrName;
 }

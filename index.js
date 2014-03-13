@@ -206,9 +206,11 @@ adapter.drop = function drop(collectionName, relations, cb) {
  */
 adapter.find = find;
 
-function find(collectionName, options, cb) {
+function find(collectionName, options, cb, round) {
 
-  var args = arguments;
+  console.log('FIND %s %j', collectionName, options);
+
+  if ('number' != typeof round) round = 0;
 
   // If you need to access your private data for this collection:
   var db = _dbs[collectionName];
@@ -233,11 +235,16 @@ function find(collectionName, options, cb) {
         cb(null, docs.map(docForReply));
       }
     });
+  } else if (options.where.like) {
+    var viewName = views.name(options.where.like);
+    var value = views.likeValue(options.where.like, true);
+    dbOptions.startkey = value.startkey;
+    dbOptions.endkey = value.endkey;
+    console.log('dbOptions:', dbOptions);
+    db.view('views', viewName, dbOptions, viewResult);
   } else {
     var viewName = views.name(options.where);
-    var value = options.where[queriedAttributes[0]];
-    if (! Array.isArray(value)) value = [value];
-    dbOptions.key = value;
+    dbOptions.key = views.value(options.where);
     db.view('views', viewName, dbOptions, viewResult);
   }
 
@@ -247,14 +254,15 @@ function find(collectionName, options, cb) {
   }
 
   function viewResult(err, reply) {
-    if (err && err.status_code == 404) views.create(db, options.where, createdView);
+    if (err && err.status_code == 404 && round < 1)
+      views.create(db, options.where.like || options.where, createdView);
     else if (err) cb(err);
     else cb(null, reply.rows.map(prop('value')).map(docForReply));
   }
 
   function createdView(err) {
     if (err) cb(err);
-    else find.apply(adapter, args);
+    else find.call(adapter, collectionName, options, cb, round + 1);
   }
 
   // Options object is normalized for you:
