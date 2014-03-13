@@ -15,6 +15,11 @@ $ npm install sails-coouchdb-orm --save
 Besides the usual Waterline stuff, this adapter also provides the class methods `merge`, `authenticate` and `session`.
 
 
+#### View
+
+TODO docs
+
+
 #### Merge
 
 Merge some attributes into one document.
