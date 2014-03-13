@@ -390,6 +390,7 @@ adapter.session = function session(collectionName, sid, cb) {
 /// Merge
 
 adapter.merge = function adapterMerge(collectionName, id, attrs, cb) {
+  var doc;
   var db = _dbs[collectionName];
 
   attrs = docForIngestion(attrs);
@@ -398,19 +399,19 @@ adapter.merge = function adapterMerge(collectionName, id, attrs, cb) {
 
   db.get(id, got);
 
-  function got(err, doc) {
+  function got(err, _doc) {
+    if (err && err.status_code == 404) _doc = {};
+    else if (err) return cb(err);
+
+    doc = merge(_doc, attrs);
+    db.insert(doc, id, saved);
+  }
+
+  function saved(err, reply) {
     if (err) cb(err);
     else {
-      var doc = merge(doc, attrs);
-      db.insert(doc, id, saved);
-    }
-
-    function saved(err, reply) {
-      if (err) cb(err);
-      else {
-        extend(doc, { _rev: reply.rev, _id: reply.id });
-        cb(null, docForReply(doc));
-      }
+      extend(doc, { _rev: reply.rev, _id: reply.id });
+      cb(null, docForReply(doc));
     }
   }
 };
