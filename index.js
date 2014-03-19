@@ -86,6 +86,8 @@ adapter.defaults = {
   autoPK: false,
   pkFormat: 'string',
 
+  views: 'default',
+
 
 
   // If setting syncable, you should consider the migrate option,
@@ -115,11 +117,7 @@ adapter.defaults = {
  */
 adapter.registerCollection = function registerCollection(collection, cb) {
 
-  console.log('REGISTER COLLECTION', collection);
-
-  var args = arguments;
-
-  var url = urlForConfig(collection.config);
+  var url = urlForConfig(collection.adapter.config);
   var db = nano(url);
 
   db.db.get(collection.identity, gotDatabase);
@@ -128,10 +126,8 @@ adapter.registerCollection = function registerCollection(collection, cb) {
     if (err && err.status_code == 404 && err.reason == 'no_db_file') {
       db.db.create(collection.identity, createdDB);
     } else {
-      db = db.db.use(collection.identity);
-
       _modelReferences[collection.identity] = collection;
-      _dbs[collection.identity] = db;
+      _dbs[collection.identity] = nano(url + collection.identity);
 
       cb();
     }
@@ -139,7 +135,7 @@ adapter.registerCollection = function registerCollection(collection, cb) {
 
   function createdDB(err) {
     if (err) cb(err);
-    else registerCollection.apply(adapter, args);
+    else adapter.registerCollection(collection, cb);
   }
 };
 
@@ -210,8 +206,6 @@ adapter.find = find;
 
 function find(collectionName, options, cb, round) {
 
-  console.log('FIND %s %j', collectionName, options);
-
   if ('number' != typeof round) round = 0;
 
   // If you need to access your private data for this collection:
@@ -242,7 +236,6 @@ function find(collectionName, options, cb, round) {
     var value = views.likeValue(options.where.like, true);
     dbOptions.startkey = value.startkey;
     dbOptions.endkey = value.endkey;
-    console.log('dbOptions:', dbOptions);
     db.view('views', viewName, dbOptions, viewResult);
   } else {
     var viewName = views.name(options.where);
@@ -388,7 +381,7 @@ adapter.session = function session(collectionName, sid, cb) {
   var collection = _modelReferences[collectionName];
 
   var sessionDb = nano({
-    url: urlForConfig(collection.config),
+    url: urlForConfig(collection.adapter.config),
     cookie: 'AuthSession=' + encodeURIComponent(sid)
   });
 
@@ -431,22 +424,21 @@ adapter.merge = function adapterMerge(collectionName, id, attrs, cb) {
 /// View
 
 adapter.view = function view(collectionName, viewName, options, cb, round) {
-  console.log('view', collectionName, viewName, options)
   if ('number' != typeof round) round = 0;
   var db = _dbs[collectionName];
 
-  db.view('views', 'custom_' + viewName, options, viewResult);
+  db.view('views', viewName, options, viewResult);
 
   function viewResult(err, results) {
-    if (err && err.status_code == 404 && err.reason == 'missing_named_view' && round < 1)
+    if (err && err.status_code == 404 && round < 2)
       populateView(collectionName, viewName, populatedView);
     else if (err) cb(err);
-    else cb(results.map(prop('value')));
+    else cb(null, (results && results.rows && results.rows || []).map(prop('value')).map(docForReply));
   }
 
   function populatedView(err) {
     if (err) cb(err);
-    else view.call(adapter, collectionName, viewName, options, cb, round + 1);
+    else adapter.view(collectionName, viewName, options, cb, round + 1);
   }
 };
 
@@ -461,16 +453,18 @@ function populateView(collectionName, viewName, cb) {
   }
 
   function gotDDoc(err, ddoc) {
-    var views = {};
-    views[viewName] = view;
-    ddoc = merge(ddoc || {}, {
-      views: views
-    });
+    if (! ddoc) ddoc = {};
+    if (! ddoc.views) ddoc.views = {};
+    if (! ddoc._id) ddoc._id = '_design/views';
 
-    db.insert('_design/views', insertedDDoc);
+    ddoc.views[viewName] = view;
+    ddoc.language = 'javascript';
+
+    db.insert(ddoc, insertedDDoc);
   }
 
   function insertedDDoc(err) {
+    console.log('INSERTED DOC:', err);
     cb(err);
   }
 }
@@ -489,7 +483,7 @@ function urlForConfig(config) {
     auth = encodeURIComponent(config.username) + ':' + encodeURIComponent(config.password) + '@';
   }
 
-  return [schema, '://', auth, config.host, ':', config.port, '/', config.database].join('');
+  return [schema, '://', auth, config.host, ':', config.port, '/'].join('');
 }
 
 function prop(p) {
