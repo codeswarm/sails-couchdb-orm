@@ -7,7 +7,8 @@ var merge = DeepMerge(function(a, b) {
   return b;
 });
 
-var views  = require('./views');
+var registry = require('./registry');
+var views    = require('./views');
 
 /**
  * Sails Boilerplate Adapter
@@ -26,7 +27,6 @@ var views  = require('./views');
 
 // You'll want to maintain a reference to each collection
 // (aka model) that gets registered with this adapter.
-var _modelReferences = {};
 
 
 
@@ -54,7 +54,7 @@ var _modelReferences = {};
 // for your adapter (i.e. worst case scenario is a pool for each model, best case
 // scenario is one single single pool.)  For many databases, any change to
 // host OR database OR user OR password = separate pool.
-var _dbs = {};
+
 
 
 var adapter = exports;
@@ -86,7 +86,7 @@ adapter.defaults = {
   autoPK: false,
   pkFormat: 'string',
 
-  views: 'default',
+  maxMergeAttempts: 5,
 
 
 
@@ -126,9 +126,8 @@ adapter.registerCollection = function registerCollection(collection, cb) {
     if (err && err.status_code == 404 && err.reason == 'no_db_file') {
       db.db.create(collection.identity, createdDB);
     } else {
-      _modelReferences[collection.identity] = collection;
-      _dbs[collection.identity] = nano(url + collection.identity);
-
+      registry.collection(collection.identity, collection);
+      registry.db(collection.identity, nano(url + collection.identity));
       cb();
     }
   }
@@ -162,8 +161,9 @@ adapter.teardown = function teardown(cb) {
  * @param  {Function} cb             [description]
  * @return {[type]}                  [description]
  */
-adapter.describe = function describe(collectionName, cb) {
-  var collection = _modelReferences[collectionName];
+adapter.describe = function describe(connectionName, collectionName, cb) {
+  var collection = registry.collection(collectionName);
+  if (! collection) return cb(new Error('no such collection'));
   cb(null, collection.definition);
 };
 
@@ -181,9 +181,9 @@ adapter.describe = function describe(collectionName, cb) {
  */
 adapter.drop = function drop(collectionName, relations, cb) {
   // If you need to access your private data for this collection:
-  var collection = _modelReferences[collectionName];
+  var collection = registry.collection(collectionName);
 
-  var db = _dbs[collectionName];
+  var db = registry.db(collectionName);
   db.db.destroy(cb);
 };
 
@@ -209,7 +209,7 @@ function find(collectionName, options, cb, round) {
   if ('number' != typeof round) round = 0;
 
   // If you need to access your private data for this collection:
-  var db = _dbs[collectionName];
+  var db = registry.db(collectionName);
 
   var dbOptions = {};
   if (options.limit) dbOptions.limit = options.limit;
@@ -260,19 +260,6 @@ function find(collectionName, options, cb, round) {
     else find.call(adapter, collectionName, options, cb, round + 1);
   }
 
-  // Options object is normalized for you:
-  //
-  // options.where
-  // options.limit
-  // options.skip
-  // options.sort
-
-  // Filter, paginate, and sort records from the datastore.
-  // You should end up w/ an array of objects as a result.
-  // If no matches were found, this will be an empty array.
-
-  // Respond with an error, or the results.
-
 };
 
 
@@ -288,7 +275,7 @@ function find(collectionName, options, cb, round) {
 adapter.create = function create(collectionName, values, cb) {
 
 
-  var db = _dbs[collectionName];
+  var db = registry.db(collectionName);
 
   db.insert(docForIngestion(values), replied);
 
@@ -322,7 +309,7 @@ adapter.update = function update(collectionName, options, values, cb) {
   if (searchAttributes[0] != 'id')
     return cb(new Error('only support updating one object by id'));
 
-  var db = _dbs[collectionName];
+  var db = registry.db(collectionName);
 
   db.insert(docForIngestion(values), options.where.id, replied);
 
@@ -359,7 +346,7 @@ adapter.destroy = function destroy(collectionName, options, cb) {
 /// Authenticate
 
 adapter.authenticate = function authenticate(collectionName, username, password, cb) {
-  var db = _dbs[collectionName];
+  var db = registry.db(collectionName);
 
   db.auth(username, password, replied);
 
@@ -378,7 +365,7 @@ adapter.authenticate = function authenticate(collectionName, username, password,
 /// Session
 
 adapter.session = function session(collectionName, sid, cb) {
-  var collection = _modelReferences[collectionName];
+  var collection = registry.collection(collectionName);
 
   var sessionDb = nano({
     url: urlForConfig(collection.adapter.config),
@@ -392,9 +379,18 @@ adapter.session = function session(collectionName, sid, cb) {
 
 /// Merge
 
-adapter.merge = function adapterMerge(collectionName, id, attrs, cb) {
+adapter.merge = function adapterMerge(collectionName, id, attrs, cb, attempts) {
   var doc;
-  var db = _dbs[collectionName];
+  var db = registry.db(collectionName);
+
+  var coll = registry.collection(collectionName);
+
+  if ('number' != typeof attempts) attempts = 0;
+  else if (attempts > 0) {
+    var config = coll.adapter.config;
+    if (config.maxMergeAttempts < attempts)
+      return cb(new Error('max attempts of merging reached'));
+  }
 
   attrs = docForIngestion(attrs);
 
@@ -411,11 +407,28 @@ adapter.merge = function adapterMerge(collectionName, id, attrs, cb) {
   }
 
   function saved(err, reply) {
-    if (err) cb(err);
+    if (err && err.status_code == 409) {
+      adapter.merge(collectionName, id, attrs, cb, attempts + 1)
+    }
+    else if (err) cb(err);
     else {
       extend(doc, { _rev: reply.rev, _id: reply.id });
-      cb(null, docForReply(doc));
+      doc = docForReply(doc);
+      cb(null, doc);
+      callback();
     }
+  }
+
+  function callback() {
+    coll._callbacks.afterUpdate.forEach(callbackOne);
+  }
+
+  function callbackOne(fn) {
+    fn.call(null, doc, calledback);
+  }
+
+  function calledback(err) {
+    if (err) console.error(err); // Not really sure what to do here
   }
 };
 
@@ -425,7 +438,7 @@ adapter.merge = function adapterMerge(collectionName, id, attrs, cb) {
 
 adapter.view = function view(collectionName, viewName, options, cb, round) {
   if ('number' != typeof round) round = 0;
-  var db = _dbs[collectionName];
+  var db = registry.db(collectionName);
 
   db.view('views', viewName, options, viewResult);
 
@@ -443,12 +456,12 @@ adapter.view = function view(collectionName, viewName, options, cb, round) {
 };
 
 function populateView(collectionName, viewName, cb) {
-  var collection = _modelReferences[collectionName];
+  var collection = registry.collection(collectionName);
 
   var view = collection.views && collection.views[viewName];
   if (! view) return cb(new Error('No view named ' + viewName + ' defined in model ' + collectionName));
   else {
-    var db = _dbs[collectionName];
+    var db = registry.db(collectionName);
     db.get('_design/views', gotDDoc);
   }
 
@@ -464,7 +477,6 @@ function populateView(collectionName, viewName, cb) {
   }
 
   function insertedDDoc(err) {
-    console.log('INSERTED DOC:', err);
     cb(err);
   }
 }
