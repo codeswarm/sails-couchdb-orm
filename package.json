@@ -4,7 +4,7 @@
   "description": "CouchDB adapter for Sails",
   "main": "index.js",
   "scripts": {
-    "test": "node test/integration/runner -R spec -b"
+    "test": "node_modules/.bin/mocha test/unit && node test/integration/runner -R spec -b"
   },
   "repository": {
     "type": "git",
@@ -31,7 +31,7 @@
     "deep-merge": "~0.3.1"
   },
   "devDependencies": {
-    "waterline-adapter-tests": "git://github.com/balderdashy/waterline-adapter-tests.git#associations",
+    "waterline-adapter-tests": "~0.9.4",
     "mocha": "*",
     "root-require": "~0.2.0",
     "captains-log": "~0.10.6"
@@ -40,8 +40,7 @@
     "sailsVersion": "~0.9.8",
     "implements": [
       "semantic",
-      "queryable",
-      "associations"
+      "queryable"
     ]
   }
 }
