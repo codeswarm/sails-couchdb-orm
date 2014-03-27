@@ -392,19 +392,30 @@ adapter.merge = function adapterMerge(collectionName, id, attrs, cb, attempts) {
       return cb(new Error('max attempts of merging reached'));
   }
 
-  attrs = docForIngestion(attrs);
-
-  delete attrs._rev;
-
   db.get(id, got);
 
   function got(err, _doc) {
     if (err && err.status_code == 404) _doc = {};
     else if (err) return cb(err);
 
+    delete attrs._rev;
+
+    _doc = docForReply(_doc);
+
     doc = merge(_doc, attrs);
-    db.insert(doc, id, saved);
+    async.eachSeries(coll._callbacks.beforeUpdate || [], invokeCallback, afterBeforeUpdate);
   }
+
+  function invokeCallback(fn, cb) {
+    fn.call(null, doc, cb);
+  }
+
+  function afterBeforeUpdate(err) {
+    if (err) return cb(err);
+
+    db.insert(docForIngestion(doc), id, saved);
+  }
+
 
   function saved(err, reply) {
     if (err && err.status_code == 409) {
@@ -414,22 +425,19 @@ adapter.merge = function adapterMerge(collectionName, id, attrs, cb, attempts) {
     else {
       extend(doc, { _rev: reply.rev, _id: reply.id });
       doc = docForReply(doc);
-      cb(null, doc);
-      callback();
+      callbackAfter();
     }
   }
 
-  function callback() {
-    coll._callbacks.afterUpdate.forEach(callbackOne);
+  function callbackAfter() {
+    async.eachSeries(coll._callbacks.afterUpdate || [], invokeCallback, finalCallback);
   }
 
-  function callbackOne(fn) {
-    fn.call(null, doc, calledback);
+  function finalCallback(err) {
+    if (err) cb(err);
+    else cb(null, doc);
   }
 
-  function calledback(err) {
-    if (err) console.error(err); // Not really sure what to do here
-  }
 };
 
 
