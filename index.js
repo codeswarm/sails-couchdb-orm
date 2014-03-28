@@ -205,7 +205,6 @@ adapter.drop = function drop(collectionName, relations, cb) {
 adapter.find = find;
 
 function find(collectionName, options, cb, round) {
-
   if ('number' != typeof round) round = 0;
 
   // If you need to access your private data for this collection:
@@ -215,7 +214,7 @@ function find(collectionName, options, cb, round) {
   if (options.limit) dbOptions.limit = options.limit;
   if (options.skip) dbOptions.skip = options.skip;
 
-  var queriedAttributes = Object.keys(options.where);
+  var queriedAttributes = Object.keys(options.where || {});
 
   if (queriedAttributes.length == 0) {
     /// All docs
@@ -245,7 +244,10 @@ function find(collectionName, options, cb, round) {
 
   function listReplied(err, docs) {
     if (err) cb(err);
-    else cb(null, docs.map(docForReply));
+    else {
+      if (!Array.isArray(docs) && docs.rows) docs = docs.rows;
+      cb(null, docs.map(docForReply))
+    };
   }
 
   function viewResult(err, reply) {
