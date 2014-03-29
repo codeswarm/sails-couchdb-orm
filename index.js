@@ -218,6 +218,7 @@ function find(collectionName, options, cb, round) {
 
   if (queriedAttributes.length == 0) {
     /// All docs
+    dbOptions.include_docs = true;
     db.list(dbOptions, listReplied);
   } else if (queriedAttributes.length == 1 &&  queriedAttributes[0] == 'id') {
     /// One doc by id
@@ -245,7 +246,7 @@ function find(collectionName, options, cb, round) {
   function listReplied(err, docs) {
     if (err) cb(err);
     else {
-      if (!Array.isArray(docs) && docs.rows) docs = docs.rows;
+      if (!Array.isArray(docs) && docs.rows) docs = docs.rows.map(prop('doc'));
       cb(null, docs.map(docForReply))
     };
   }
