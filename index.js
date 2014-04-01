@@ -223,7 +223,8 @@ function find(collectionName, options, cb, round) {
   } else if (queriedAttributes.length == 1 &&  queriedAttributes[0] == 'id') {
     /// One doc by id
     db.get(options.where.id, dbOptions, function(err, doc) {
-      if (err) cb(err);
+      if (err && err.status_code == 404) cb(null, []);
+      else if (err) cb(err);
       else {
         var docs;
         if (doc) docs = [doc];
