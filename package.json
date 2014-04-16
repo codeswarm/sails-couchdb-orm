@@ -18,9 +18,13 @@
     "waterline",
     "orm",
     "sailsjs",
-    "sails.js"
+    "sails.js",
+		"codeswarm"
   ],
-  "author": "Pedro Teixeira <pteixeira@appendto.com>",
+  "author": [
+		"Pedro Teixeira <pteixeira@appendto.com>",
+		"CodeSwarm <hello@codeswarm.com>"
+	],
   "license": "MIT",
   "readmeFilename": "README.md",
   "dependencies": {
