@@ -6,7 +6,7 @@
 
 ## Versions
 
-The 0.9.x version of this adapter is maintained in a branch available here: https://github.com/balderdashy/waterline
+The 0.9.x version of this adapter is maintained in a branch available here: https://github.com/codeswarm/sails-couchdb-orm/tree/0.9.x
 
 The 0.10.x version of this adapter is maintained on the master branch.
 
