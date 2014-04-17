@@ -115,7 +115,7 @@ adapter.defaults = {
  * @param  {Function} cb         [description]
  * @return {[type]}              [description]
  */
-adapter.registerCollection = function registerCollection(collection, cb) {
+adapter.registerConnection = function registerConnection(connectionName, collection, cb) {
 
   var url = urlForConfig(collection.adapter.config);
   var db = nano(url);
