@@ -35,13 +35,13 @@
     "deep-merge": "~0.3.1"
   },
   "devDependencies": {
-    "waterline-adapter-tests": "~0.9.4",
+    "waterline-adapter-tests": "~0.10.0",
     "mocha": "*",
     "root-require": "~0.2.0",
     "captains-log": "~0.10.6"
   },
   "sailsAdapter": {
-    "sailsVersion": "~0.9.8",
+    "sailsVersion": "~0.10.0",
     "implements": [
       "semantic",
       "queryable"
