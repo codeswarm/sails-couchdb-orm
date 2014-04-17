@@ -2,7 +2,13 @@
 
 # Waterline CouchDB Adapter
 
-Waterline adapter for CouchDB.
+[Waterline](https://github.com/balderdashy/waterline) adapter for CouchDB.
+
+## Versions
+
+The 0.9.x version of this adapter is maintained in a branch available here: https://github.com/balderdashy/waterline
+
+The 0.10.x version of this adapter is maintained on the master branch.
 
 ## Install
 
@@ -54,6 +60,7 @@ var password = req.param('password');
 Users.authenticate(username, password, function(err, sessionId, username, roles) {
   // ...
 });
+```
 
 
 #### Session
