@@ -323,7 +323,7 @@ function find(connectionName, collectionName, options, cb, round) {
 adapter.create = function create(connectionName, collectionName, values, cb) {
 
 
-  var db = registry.db(connectionName);
+  var db = registry.db(collectionName);
 
   db.insert(docForIngestion(values), replied);
 
@@ -357,7 +357,7 @@ adapter.update = function update(connectionName, collectionName, options, values
   if (searchAttributes[0] != 'id')
     return cb(new Error('only support updating one object by id'));
 
-  var db = registry.db(connectionName);
+  var db = registry.db(collectionName);
 
   db.insert(docForIngestion(values), options.where.id, replied);
 
@@ -393,8 +393,8 @@ adapter.destroy = function destroy(connectionName, collectionName, options, cb) 
 
 /// Authenticate
 
-adapter.authenticate = function authenticate(connectionName, collectionName, username, password, cb) {
-  var db = registry.db(connectionName);
+adapter.authenticate = function authenticate(connection, collectionName, username, password, cb) {
+  var db = registry.db(collectionName);
 
   db.auth(username, password, replied);
 
@@ -429,9 +429,9 @@ adapter.session = function session(connection, collectionName, sid, cb) {
 
 adapter.merge = function adapterMerge(connectionName, collectionName, id, attrs, cb, attempts) {
   var doc;
-  var db = registry.db(connectionName);
+  var db = registry.db(collectionName);
 
-  var coll = registry.collection(connectionName);
+  var coll = registry.collection(collectionName);
 
   if ('number' != typeof attempts) attempts = 0;
   else if (attempts > 0) {
@@ -494,7 +494,7 @@ adapter.merge = function adapterMerge(connectionName, collectionName, id, attrs,
 
 adapter.view = function view(connectionName, collectionName, viewName, options, cb, round) {
   if ('number' != typeof round) round = 0;
-  var db = registry.db(connectionName);
+  var db = registry.db(collectionName);
 
   db.view('views', viewName, options, viewResult);
 
@@ -512,7 +512,7 @@ adapter.view = function view(connectionName, collectionName, viewName, options, 
 };
 
 function populateView(connectionName, collectionName, viewName, cb) {
-  var collection = registry.collection(connectionName);
+  var collection = registry.collection(collectionName);
 
   var view = collection.views && collection.views[viewName];
   if (! view) return cb(new Error('No view named ' + viewName + ' defined in model ' + collectionName));
