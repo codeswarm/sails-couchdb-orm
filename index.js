@@ -161,10 +161,8 @@ adapter.registerSingleCollection = function registerCollection(connection, colle
 
   function gotDatabase(err) {
     if (err && err.status_code == 404 && err.reason == 'no_db_file') {
-			//console.log("Created "+collectionName);
       db.db.create(collectionName, createdDB);
     } else {
-			//console.log("Registered "+collectionName);
       registry.collection(collectionName, collection);
       registry.db(collectionName, nano(url + collectionName));
       cb();
@@ -324,7 +322,6 @@ adapter.create = function create(connectionName, collectionName, values, cb) {
 
 
   var db = registry.db(collectionName);
-
   db.insert(docForIngestion(values), replied);
 
   function replied(err, reply) {
@@ -381,7 +378,7 @@ adapter.update = function update(connectionName, collectionName, options, values
  * @return {[type]}                  [description]
  */
 adapter.destroy = function destroy(connectionName, collectionName, options, cb) {
-
+	// TODO
 };
 
 
@@ -467,7 +464,7 @@ adapter.merge = function adapterMerge(connectionName, collectionName, id, attrs,
 
   function saved(err, reply) {
     if (err && err.status_code == 409) {
-      adapter.merge(collectionName, id, attrs, cb, attempts + 1)
+      adapter.merge(connectionName, collectionName, id, attrs, cb, attempts + 1)
     }
     else if (err) cb(err);
     else {
@@ -507,7 +504,7 @@ adapter.view = function view(connectionName, collectionName, viewName, options, 
 
   function populatedView(err) {
     if (err) cb(err);
-    else adapter.view(collectionName, viewName, options, cb, round + 1);
+    else adapter.view(connectionName, collectionName, viewName, options, cb, round + 1);
   }
 };
 
