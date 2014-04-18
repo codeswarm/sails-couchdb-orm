@@ -19,12 +19,12 @@
     "orm",
     "sailsjs",
     "sails.js",
-		"codeswarm"
+    "codeswarm"
   ],
   "author": [
-		"Pedro Teixeira <pteixeira@appendto.com>",
-		"CodeSwarm <hello@codeswarm.com>"
-	],
+    "Pedro Teixeira <pteixeira@appendto.com>",
+    "CodeSwarm <hello@codeswarm.com>"
+  ],
   "license": "MIT",
   "readmeFilename": "README.md",
   "dependencies": {
@@ -32,7 +32,9 @@
     "xtend": "~2.1.2",
     "cookie": "~0.1.1",
     "handlebars": "~2.0.0-alpha.2",
-    "deep-merge": "~0.3.1"
+    "deep-merge": "~0.3.1",
+    "underscore": "^1.6.0",
+    "async": "^0.7.0"
   },
   "devDependencies": {
     "waterline-adapter-tests": "~0.10.0",

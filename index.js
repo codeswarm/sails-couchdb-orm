@@ -1,7 +1,9 @@
 var nano       = require('nano');
+var async			 = require('async');
 var extend     = require('xtend');
 var cookie     = require('cookie');
 var DeepMerge  = require('deep-merge');
+var _					 = require('underscore');
 
 var merge = DeepMerge(function(a, b) {
   return b;
@@ -115,33 +117,57 @@ adapter.defaults = {
  * @param  {Function} cb         [description]
  * @return {[type]}              [description]
  */
-adapter.registerConnection = function registerConnection(connection, collection, cb) {
+adapter.registerConnection = function registerConnection(connection, collections, cb) {
+
+  var url = urlForConfig(connection);
+  var db = nano(url);
+	var models = [];
+
+	for(var model in collections) {
+		models.push(model);
+	}
+
+	async.each(models,function(model,cb) {
+		adapter.registerSingleCollection(connection,model,collections[model],cb);
+	},function(err) {
+		if(err) {
+			cb(new Error("Problem when registering Collections"));
+		}
+		else {
+			cb();
+		}
+	});
+};
+
+/**
+ *
+ * This method runs to register a single model, or collection.
+ *
+ * @param  {[type]}   connection [description]
+ * @param  {[type]}   collection [description]
+ * @param  {Function} cb         [description]
+ * @return {[type]}              [description]
+ */
+adapter.registerSingleCollection = function registerCollection(connection, collectionName, collection, cb) {
 
   var url = urlForConfig(connection);
   var db = nano(url);
 
-  db.db.get(connection.identity, gotDatabase);
-
+  db.db.get(collectionName, gotDatabase);
 
   function gotDatabase(err) {
     if (err && err.status_code == 404 && err.reason == 'no_db_file') {
-      db.db.create(connection.identity, createdDB);
+      db.db.create(collectionName, createdDB);
     } else {
-      registry.collection(connection.identity, collection);
-      registry.db(connection.identity, nano(url + connection.identity));
+      registry.collection(collectionName, collection);
+      registry.db(collectionName, nano(url + collectionName));
       cb();
     }
   }
 
   function createdDB(err) {
-    if (err) {
-			console.log("Connection Error! "+err);
-			cb(err);
-		}
-    else {
-			console.log("Register again!");
-			adapter.registerConnection(connection, cb);
-		}
+    if (err) cb(err);
+    else adapter.registerSingleCollection(connection, collectionName, collection, cb);
   }
 };
 
@@ -154,7 +180,7 @@ adapter.registerConnection = function registerConnection(connection, collection,
  * @param  {Function} cb [description]
  * @return {[type]}      [description]
  */
-adapter.teardown = function teardown(cb) {
+adapter.teardown = function teardown(connection, cb) {
   process.nextTick(cb);
 };
 
@@ -168,11 +194,12 @@ adapter.teardown = function teardown(cb) {
  * @param  {Function} cb             [description]
  * @return {[type]}                  [description]
  */
-adapter.describe = function describe(connectionName, collectionName, cb) {
-  var collection = registry.collection(connectionName);
+adapter.describe = function describe(connection, collectionName, cb) {
+  var collection = registry.collection(collectionName);
   if (! collection) 
 		return cb(new Error('no such collection'));
-  cb(null, collection.definition);
+
+  return cb(null, collection.definition);
 };
 
 
@@ -188,11 +215,8 @@ adapter.describe = function describe(connectionName, collectionName, cb) {
  * @return {[type]}                  [description]
  */
 adapter.drop = function drop(connectionName, collectionName, relations, cb) {
-  // If you need to access your private data for this collection:
-  var collection = registry.collection(connectionName);
-
   var db = registry.db(collectionName);
-  db.db.destroy(cb);
+  db.destroy(cb);
 };
 
 
@@ -216,7 +240,7 @@ function find(connectionName, collectionName, options, cb, round) {
   if ('number' != typeof round) round = 0;
 
   // If you need to access your private data for this collection:
-  var db = registry.db(connectionName);
+  var db = registry.db(collectionName);
 
   var dbOptions = {};
   if (options.limit) dbOptions.limit = options.limit;
@@ -380,7 +404,7 @@ adapter.session = function session(connectionName, collectionName, sid, cb) {
   var collection = registry.collection(connectionName);
 
   var sessionDb = nano({
-    url: urlForConfig(collection.adapter.config),
+    url: urlForConfig(connectionName),
     cookie: 'AuthSession=' + encodeURIComponent(sid)
   });
 
