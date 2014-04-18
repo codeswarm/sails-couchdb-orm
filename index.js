@@ -115,26 +115,33 @@ adapter.defaults = {
  * @param  {Function} cb         [description]
  * @return {[type]}              [description]
  */
-adapter.registerConnection = function registerConnection(connectionName, collection, cb) {
+adapter.registerConnection = function registerConnection(connection, collection, cb) {
 
-  var url = urlForConfig(collection.adapter.config);
+  var url = urlForConfig(connection);
   var db = nano(url);
 
-  db.db.get(collection.identity, gotDatabase);
+  db.db.get(connection.identity, gotDatabase);
+
 
   function gotDatabase(err) {
     if (err && err.status_code == 404 && err.reason == 'no_db_file') {
-      db.db.create(collection.identity, createdDB);
+      db.db.create(connection.identity, createdDB);
     } else {
-      registry.collection(collection.identity, collection);
-      registry.db(collection.identity, nano(url + collection.identity));
+      registry.collection(connection.identity, collection);
+      registry.db(connection.identity, nano(url + connection.identity));
       cb();
     }
   }
 
   function createdDB(err) {
-    if (err) cb(err);
-    else adapter.registerCollection(collection, cb);
+    if (err) {
+			console.log("Connection Error! "+err);
+			cb(err);
+		}
+    else {
+			console.log("Register again!");
+			adapter.registerConnection(connection, cb);
+		}
   }
 };
 
@@ -162,8 +169,9 @@ adapter.teardown = function teardown(cb) {
  * @return {[type]}                  [description]
  */
 adapter.describe = function describe(connectionName, collectionName, cb) {
-  var collection = registry.collection(collectionName);
-  if (! collection) return cb(new Error('no such collection'));
+  var collection = registry.collection(connectionName);
+  if (! collection) 
+		return cb(new Error('no such collection'));
   cb(null, collection.definition);
 };
 
@@ -179,9 +187,9 @@ adapter.describe = function describe(connectionName, collectionName, cb) {
  * @param  {Function} cb             [description]
  * @return {[type]}                  [description]
  */
-adapter.drop = function drop(collectionName, relations, cb) {
+adapter.drop = function drop(connectionName, collectionName, relations, cb) {
   // If you need to access your private data for this collection:
-  var collection = registry.collection(collectionName);
+  var collection = registry.collection(connectionName);
 
   var db = registry.db(collectionName);
   db.db.destroy(cb);
@@ -204,11 +212,11 @@ adapter.drop = function drop(collectionName, relations, cb) {
  */
 adapter.find = find;
 
-function find(collectionName, options, cb, round) {
+function find(connectionName, collectionName, options, cb, round) {
   if ('number' != typeof round) round = 0;
 
   // If you need to access your private data for this collection:
-  var db = registry.db(collectionName);
+  var db = registry.db(connectionName);
 
   var dbOptions = {};
   if (options.limit) dbOptions.limit = options.limit;
@@ -276,10 +284,10 @@ function find(collectionName, options, cb, round) {
  * @param  {Function} cb             [description]
  * @return {[type]}                  [description]
  */
-adapter.create = function create(collectionName, values, cb) {
+adapter.create = function create(connectionName, collectionName, values, cb) {
 
 
-  var db = registry.db(collectionName);
+  var db = registry.db(connectionName);
 
   db.insert(docForIngestion(values), replied);
 
@@ -305,7 +313,7 @@ adapter.create = function create(collectionName, values, cb) {
  * @param  {Function} cb             [description]
  * @return {[type]}                  [description]
  */
-adapter.update = function update(collectionName, options, values, cb) {
+adapter.update = function update(connectionName, collectionName, options, values, cb) {
 
   var searchAttributes = Object.keys(options.where);
   if (searchAttributes.length != 1)
@@ -313,7 +321,7 @@ adapter.update = function update(collectionName, options, values, cb) {
   if (searchAttributes[0] != 'id')
     return cb(new Error('only support updating one object by id'));
 
-  var db = registry.db(collectionName);
+  var db = registry.db(connectionName);
 
   db.insert(docForIngestion(values), options.where.id, replied);
 
@@ -336,7 +344,7 @@ adapter.update = function update(collectionName, options, values, cb) {
  * @param  {Function} cb             [description]
  * @return {[type]}                  [description]
  */
-adapter.destroy = function destroy(collectionName, options, cb) {
+adapter.destroy = function destroy(connectionName, collectionName, options, cb) {
 
 };
 
@@ -349,8 +357,8 @@ adapter.destroy = function destroy(collectionName, options, cb) {
 
 /// Authenticate
 
-adapter.authenticate = function authenticate(collectionName, username, password, cb) {
-  var db = registry.db(collectionName);
+adapter.authenticate = function authenticate(connectionName, collectionName, username, password, cb) {
+  var db = registry.db(connectionName);
 
   db.auth(username, password, replied);
 
@@ -368,8 +376,8 @@ adapter.authenticate = function authenticate(collectionName, username, password,
 
 /// Session
 
-adapter.session = function session(collectionName, sid, cb) {
-  var collection = registry.collection(collectionName);
+adapter.session = function session(connectionName, collectionName, sid, cb) {
+  var collection = registry.collection(connectionName);
 
   var sessionDb = nano({
     url: urlForConfig(collection.adapter.config),
@@ -383,11 +391,11 @@ adapter.session = function session(collectionName, sid, cb) {
 
 /// Merge
 
-adapter.merge = function adapterMerge(collectionName, id, attrs, cb, attempts) {
+adapter.merge = function adapterMerge(connectionName, collectionName, id, attrs, cb, attempts) {
   var doc;
-  var db = registry.db(collectionName);
+  var db = registry.db(connectionName);
 
-  var coll = registry.collection(collectionName);
+  var coll = registry.collection(connectionName);
 
   if ('number' != typeof attempts) attempts = 0;
   else if (attempts > 0) {
@@ -448,15 +456,15 @@ adapter.merge = function adapterMerge(collectionName, id, attrs, cb, attempts) {
 
 /// View
 
-adapter.view = function view(collectionName, viewName, options, cb, round) {
+adapter.view = function view(connectionName, collectionName, viewName, options, cb, round) {
   if ('number' != typeof round) round = 0;
-  var db = registry.db(collectionName);
+  var db = registry.db(connectionName);
 
   db.view('views', viewName, options, viewResult);
 
   function viewResult(err, results) {
     if (err && err.status_code == 404 && round < 2)
-      populateView(collectionName, viewName, populatedView);
+      populateView(connectionName, collectionName, viewName, populatedView);
     else if (err) cb(err);
     else cb(null, (results && results.rows && results.rows || []).map(prop('value')).map(docForReply));
   }
@@ -467,8 +475,8 @@ adapter.view = function view(collectionName, viewName, options, cb, round) {
   }
 };
 
-function populateView(collectionName, viewName, cb) {
-  var collection = registry.collection(collectionName);
+function populateView(connectionName, collectionName, viewName, cb) {
+  var collection = registry.collection(connectionName);
 
   var view = collection.views && collection.views[viewName];
   if (! view) return cb(new Error('No view named ' + viewName + ' defined in model ' + collectionName));
