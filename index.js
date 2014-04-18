@@ -107,7 +107,6 @@ adapter.defaults = {
   migrate: 'safe'
 };
 
-
 /**
  *
  * This method runs when a model is initially registered
@@ -121,19 +120,24 @@ adapter.registerConnection = function registerConnection(connection, collections
 
   var url = urlForConfig(connection);
   var db = nano(url);
-	var models = [];
 
-	for(var model in collections) {
-		models.push(model);
-	}
+	// Save the connection
+	registry.connection(connection.identity,connection);
 
-	async.each(models,function(model,cb) {
+	//console.log("Start registering connection");
+	//console.log(Object.keys(collections));
+	async.each(Object.keys(collections),function(model,cb) {
+		//console.log("Register "+model);
 		adapter.registerSingleCollection(connection,model,collections[model],cb);
 	},function(err) {
+		//console.log("Done registering connection");
+		//console.log(err);
 		if(err) {
+			//console.log("Problem!");
 			cb(new Error("Problem when registering Collections"));
 		}
 		else {
+			//console.log("Success registering connections!");
 			cb();
 		}
 	});
@@ -157,8 +161,10 @@ adapter.registerSingleCollection = function registerCollection(connection, colle
 
   function gotDatabase(err) {
     if (err && err.status_code == 404 && err.reason == 'no_db_file') {
+			//console.log("Created "+collectionName);
       db.db.create(collectionName, createdDB);
     } else {
+			//console.log("Registered "+collectionName);
       registry.collection(collectionName, collection);
       registry.db(collectionName, nano(url + collectionName));
       cb();
@@ -166,8 +172,12 @@ adapter.registerSingleCollection = function registerCollection(connection, colle
   }
 
   function createdDB(err) {
-    if (err) cb(err);
-    else adapter.registerSingleCollection(connection, collectionName, collection, cb);
+    if (err) {
+			cb(err);
+		}
+    else {
+			adapter.registerSingleCollection(connection, collectionName, collection, cb);
+		}
   }
 };
 
@@ -215,8 +225,10 @@ adapter.describe = function describe(connection, collectionName, cb) {
  * @return {[type]}                  [description]
  */
 adapter.drop = function drop(connectionName, collectionName, relations, cb) {
-  var db = registry.db(collectionName);
-  db.destroy(cb);
+  var url = urlForConfig(connectionName);
+  var db = nano(url);
+
+  db.db.destroy(collectionName, cb);
 };
 
 
@@ -400,11 +412,11 @@ adapter.authenticate = function authenticate(connectionName, collectionName, use
 
 /// Session
 
-adapter.session = function session(connectionName, collectionName, sid, cb) {
-  var collection = registry.collection(connectionName);
+adapter.session = function session(connection, collectionName, sid, cb) {
+  var url = urlForConfig(registry.connection(connection));
 
   var sessionDb = nano({
-    url: urlForConfig(connectionName),
+    url: url,
     cookie: 'AuthSession=' + encodeURIComponent(sid)
   });
 

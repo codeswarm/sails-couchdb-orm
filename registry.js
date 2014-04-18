@@ -1,5 +1,22 @@
+var connections = {};
 var collections = {};
 var dbs = {};
+
+/// connections
+exports.connection = connection;
+
+function connection(name, connection) {
+  if (! connection) return getConnection(name);
+  else return setConnection(name, connection);
+}
+
+function setConnection(name, connection) {
+  connections[name] = connection;
+}
+
+function getConnection(name) {
+  return connections[name];
+}
 
 /// collection
 
