@@ -1,0 +1,45 @@
+{
+  "name": "sails-couchdb-orm",
+  "version": "0.0.1",
+  "description": "CouchDB adapter for Sails",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test/integration/runner -R spec -b"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codeswarm/sails-couchdb-orm.git"
+  },
+  "keywords": [
+    "couchdb",
+    "couch",
+    "adapter",
+    "sails",
+    "waterline",
+    "orm",
+    "sailsjs",
+    "sails.js"
+  ],
+  "author": "Pedro Teixeira <pteixeira@appendto.com>",
+  "license": "MIT",
+  "readmeFilename": "README.md",
+  "dependencies": {
+    "nano": "~5.7.1",
+    "xtend": "~2.1.2",
+    "cookie": "~0.1.1"
+  },
+  "devDependencies": {
+    "waterline-adapter-tests": "git://github.com/balderdashy/waterline-adapter-tests.git#associations",
+    "mocha": "*",
+    "root-require": "~0.2.0",
+    "captains-log": "~0.10.6"
+  },
+  "sailsAdapter": {
+    "sailsVersion": "~0.9.8",
+    "implements": [
+      "semantic",
+      "queryable",
+      "associations"
+    ]
+  }
+}
