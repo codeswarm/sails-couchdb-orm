@@ -1,6 +1,6 @@
 {
   "name": "sails-couchdb-orm",
-  "version": "0.0.1",
+  "version": "0.10.0",
   "description": "CouchDB adapter for Sails",
   "main": "index.js",
   "scripts": {
@@ -22,8 +22,8 @@
     "codeswarm"
   ],
   "author": [
-    "Pedro Teixeira <pteixeira@appendto.com>",
-    "CodeSwarm <hello@codeswarm.com>"
+    "Pedro Teixeira <i@pgte.me>",
+    "Mike Hostetler <mike.hostetler@gmail.com>"
   ],
   "license": "MIT",
   "readmeFilename": "README.md",
