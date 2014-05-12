@@ -84,7 +84,7 @@ adapter.defaults = {
   password: null,
 
   schema: true,
-  syncable: true,
+  syncable: false,
   autoPK: false,
   pkFormat: 'string',
 
@@ -303,7 +303,7 @@ function find(connectionName, collectionName, options, cb, round) {
 
   function createdView(err) {
     if (err) cb(err);
-    else find.call(adapter, collectionName, options, cb, round + 1);
+    else find.call(connectionName, connectionName, collectionName, options, cb, round + 1);
   }
 
 };
