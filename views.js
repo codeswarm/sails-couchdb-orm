@@ -66,7 +66,7 @@ function createView(db, where, cb) {
       map: map
     };
 
-    console.log('ABOUT TO INSERT DDOC', ddoc);
+    //console.log('ABOUT TO INSERT DDOC', ddoc);
 
     db.insert(ddoc, '_design/views', cb);
   }
