@@ -378,7 +378,13 @@ adapter.update = function update(connectionName, collectionName, options, values
  * @return {[type]}                  [description]
  */
 adapter.destroy = function destroy(connectionName, collectionName, options, cb) {
-	// TODO
+	// Find the record
+  var db = registry.db(collectionName);
+	adapter.find(connectionName,collectionName,options, function(err,docs) {
+		async.each(docs,function(item,localCb) {
+			db.destroy(item.id,item.rev,localCb);
+		},cb);
+	});
 };
 
 
