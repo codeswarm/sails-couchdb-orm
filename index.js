@@ -257,14 +257,18 @@ function find(connectionName, collectionName, options, cb, round) {
   if (options.skip) dbOptions.skip = options.skip;
 
   var queriedAttributes = Object.keys(options.where || {});
+	//console.log("Queried Attributes: ",queriedAttributes);
 
   if (queriedAttributes.length == 0) {
+		//console.log("Queried Attributes doesn't contain any values");
     /// All docs
     dbOptions.include_docs = true;
     db.list(dbOptions, listReplied);
-  } else if (queriedAttributes.length == 1 &&  queriedAttributes[0] == 'id') {
+  } else if (queriedAttributes.length == 1 && (queriedAttributes[0] == 'id' || queriedAttributes[0] == '_id')) {
+		var id = options.where.id || options.where._id;
+
     /// One doc by id
-    db.get(options.where.id, dbOptions, function(err, doc) {
+    db.get(id, dbOptions, function(err, doc) {
       if (err && err.status_code == 404) cb(null, []);
       else if (err) cb(err);
       else {
@@ -275,12 +279,14 @@ function find(connectionName, collectionName, options, cb, round) {
       }
     });
   } else if (options.where.like) {
+		//console.log("Query by where: ",options.where.like);
     var viewName = views.name(options.where.like);
     var value = views.likeValue(options.where.like, true);
     dbOptions.startkey = value.startkey;
     dbOptions.endkey = value.endkey;
     db.view('views', viewName, dbOptions, viewResult);
   } else {
+		//console.log("Lets look with a view: ",options.where);
     var viewName = views.name(options.where);
     dbOptions.key = views.value(options.where);
     db.view('views', viewName, dbOptions, viewResult);
@@ -320,7 +326,6 @@ function find(connectionName, collectionName, options, cb, round) {
  */
 adapter.create = function create(connectionName, collectionName, values, cb) {
 
-
   var db = registry.db(collectionName);
   db.insert(docForIngestion(values), replied);
 
@@ -348,6 +353,10 @@ adapter.create = function create(connectionName, collectionName, values, cb) {
  */
 adapter.update = function update(connectionName, collectionName, options, values, cb) {
 
+	adapter.merge(connectionName,collectionName,values.id,values,replied,1);
+	/*
+	adapter.merge = function adapterMerge(connectionName, collectionName, id, attrs, cb, attempts) {
+
   var searchAttributes = Object.keys(options.where);
   if (searchAttributes.length != 1)
     return cb(new Error('only support updating one object by id'));
@@ -356,7 +365,10 @@ adapter.update = function update(connectionName, collectionName, options, values
 
   var db = registry.db(collectionName);
 
+	console.log("Saving "+collectionName+" with id ",options,values);
+
   db.insert(docForIngestion(values), options.where.id, replied);
+	*/
 
   function replied(err, reply) {
     if (err) cb(err);
@@ -435,12 +447,19 @@ adapter.merge = function adapterMerge(connectionName, collectionName, id, attrs,
   var db = registry.db(collectionName);
 
   var coll = registry.collection(collectionName);
+	/*
+	console.log('------------------------------------------');
+	console.log('Attempting merge on ',collectionName,id,attrs);
+	console.log('------------------------------------------');
+	*/
 
   if ('number' != typeof attempts) attempts = 0;
   else if (attempts > 0) {
     var config = coll.adapter.config;
-    if (config.maxMergeAttempts < attempts)
+		// Reference to maxMergeAttempts
+    if (attempts > 5) {
       return cb(new Error('max attempts of merging reached'));
+		}
   }
 
   db.get(id, got);
@@ -454,22 +473,28 @@ adapter.merge = function adapterMerge(connectionName, collectionName, id, attrs,
     _doc = docForReply(_doc);
 
     doc = merge(_doc, attrs);
+		//console.log('----------Callbacks',coll._callbacks.beforeUpdate);
     async.eachSeries(coll._callbacks.beforeUpdate || [], invokeCallback, afterBeforeUpdate);
   }
 
   function invokeCallback(fn, cb) {
+		//console.log("----------Calling Function ",fn);
     fn.call(null, doc, cb);
   }
 
   function afterBeforeUpdate(err) {
     if (err) return cb(err);
 
-    db.insert(docForIngestion(doc), id, saved);
-  }
+		var newdoc = docForIngestion(doc);
+		//console.log('----------Heres our final doc',newdoc._id,newdoc._rev);
+		//console.trace();
 
+    db.insert(newdoc, id, saved);
+  }
 
   function saved(err, reply) {
     if (err && err.status_code == 409) {
+			//console.log('Calling merge again!');
       adapter.merge(connectionName, collectionName, id, attrs, cb, attempts + 1)
     }
     else if (err) cb(err);
