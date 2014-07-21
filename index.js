@@ -223,9 +223,9 @@ adapter.describe = function describe(connection, collectionName, cb) {
  * @return {[type]}                  [description]
  */
 adapter.drop = function drop(connectionName, collectionName, relations, cb) {
-  var url = urlForConfig(connectionName);
+  var connection = registry.connection(connectionName);
+  var url = urlForConfig(connection);
   var db = nano(url);
-
   db.db.destroy(collectionName, cb);
 };
 
@@ -353,30 +353,32 @@ adapter.create = function create(connectionName, collectionName, values, cb) {
  */
 adapter.update = function update(connectionName, collectionName, options, values, cb) {
 
-	adapter.merge(connectionName,collectionName,values.id,values,replied,1);
-	/*
-	adapter.merge = function adapterMerge(connectionName, collectionName, id, attrs, cb, attempts) {
-
   var searchAttributes = Object.keys(options.where);
   if (searchAttributes.length != 1)
     return cb(new Error('only support updating one object by id'));
   if (searchAttributes[0] != 'id')
     return cb(new Error('only support updating one object by id'));
 
-  var db = registry.db(collectionName);
+  // Find the document
+	adapter.find(connectionName, collectionName, options, function(err,docs) {
+    var doc = docs[0]; // only one document with that id
+    if(!doc) return cb('No document found to update.');
 
-	console.log("Saving "+collectionName+" with id ",options,values);
+    delete values.id; // deleting id from values attr
+    Object.keys(values).forEach(function(key) {
+      doc[key] = values[key];
+    });
 
-  db.insert(docForIngestion(values), options.where.id, replied);
-	*/
-
-  function replied(err, reply) {
-    if (err) cb(err);
-    else {
-      var attrs = extend({}, values, { _id: reply.id, _rev: reply.rev });
-      cb(null, docForReply(attrs));
-    }
-  }
+    //console.log('Document to update: ', doc);
+    var db = registry.db(collectionName);
+    db.insert(docForIngestion(doc), options.where.id, function(err, reply) {
+      if (err) cb(err);
+      else {
+        var attrs = extend({}, doc, { _id: reply.id, _rev: reply.rev });
+        cb(null, docForReply(attrs));
+      }
+    });
+  });
 };
 
 
@@ -390,13 +392,16 @@ adapter.update = function update(connectionName, collectionName, options, values
  * @return {[type]}                  [description]
  */
 adapter.destroy = function destroy(connectionName, collectionName, options, cb) {
-	// Find the record
   var db = registry.db(collectionName);
+
+	// Find the record
 	adapter.find(connectionName,collectionName,options, function(err,docs) {
-		async.each(docs,function(item,localCb) {
-			db.destroy(item.id,item.rev,localCb);
-		},cb);
-	});
+    async.each(docs,function(item) { // Shoud have only one.
+      db.destroy(item.id, item.rev, function(err, doc) {
+        cb(err,[doc]); // Waterline expects an array as result.
+      });
+    });
+  });
 };
 
 
@@ -455,7 +460,7 @@ adapter.merge = function adapterMerge(connectionName, collectionName, id, attrs,
 
   if ('number' != typeof attempts) attempts = 0;
   else if (attempts > 0) {
-    var config = coll.adapter.config;
+    //var config = coll.adapter.config;
 		// Reference to maxMergeAttempts
     if (attempts > 5) {
       return cb(new Error('max attempts of merging reached'));
