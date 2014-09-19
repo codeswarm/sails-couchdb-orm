@@ -25,6 +25,9 @@
     "Pedro Teixeira <i@pgte.me>",
     "Mike Hostetler <mike.hostetler@gmail.com>"
   ],
+  "contributors": [
+    "Matheus Hoffmann Silva <hoffmann.matheus@gmail.com>"
+  ],
   "license": "MIT",
   "readmeFilename": "README.md",
   "dependencies": {

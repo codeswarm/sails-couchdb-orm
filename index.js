@@ -1,9 +1,9 @@
-var nano       = require('nano');
-var async			 = require('async');
-var extend     = require('xtend');
-var cookie     = require('cookie');
-var DeepMerge  = require('deep-merge');
-var _					 = require('underscore');
+var nano      = require('nano');
+var async     = require('async');
+var extend    = require('xtend');
+var cookie    = require('cookie');
+var DeepMerge = require('deep-merge');
+var _         = require('underscore');
 
 var merge = DeepMerge(function(a, b) {
   return b;
@@ -121,26 +121,24 @@ adapter.registerConnection = function registerConnection(connection, collections
   var url = urlForConfig(connection);
   var db = nano(url);
 
-	// Save the connection
-	registry.connection(connection.identity,connection);
+  // Save the connection
+  registry.connection(connection.identity,connection);
 
-	//console.log("Start registering connection");
-	//console.log(Object.keys(collections));
-	async.each(Object.keys(collections),function(model,cb) {
-		//console.log("Register "+model);
-		adapter.registerSingleCollection(connection,model,collections[model],cb);
-	},function(err) {
-		//console.log("Done registering connection");
-		//console.log(err);
-		if(err) {
-			//console.log("Problem!");
-			cb(new Error("Problem when registering Collections"));
-		}
-		else {
-			//console.log("Success registering connections!");
-			cb();
-		}
-	});
+  //console.log(Object.keys(collections));
+  async.each(Object.keys(collections),function(model,cb) {
+    //console.log("Register "+model);
+    adapter.registerSingleCollection(connection,model,collections[model],cb);
+  }, function(err) {
+    //console.log(err);
+    if(err) {
+      //console.log("Problem!");
+      cb(new Error("Problem when registering Collections"));
+    }
+    else {
+      //console.log("Success registering connections!");
+      cb();
+    }
+  });
 };
 
 /**
@@ -171,11 +169,11 @@ adapter.registerSingleCollection = function registerCollection(connection, colle
 
   function createdDB(err) {
     if (err) {
-			cb(err);
-		}
+      cb(err);
+    }
     else {
-			adapter.registerSingleCollection(connection, collectionName, collection, cb);
-		}
+      adapter.registerSingleCollection(connection, collectionName, collection, cb);
+    }
   }
 };
 
@@ -205,7 +203,7 @@ adapter.teardown = function teardown(connection, cb) {
 adapter.describe = function describe(connection, collectionName, cb) {
   var collection = registry.collection(collectionName);
   if (! collection) 
-		return cb(new Error('no such collection'));
+    return cb(new Error('no such collection'));
 
   return cb(null, collection.definition);
 };
@@ -223,9 +221,9 @@ adapter.describe = function describe(connection, collectionName, cb) {
  * @return {[type]}                  [description]
  */
 adapter.drop = function drop(connectionName, collectionName, relations, cb) {
-  var url = urlForConfig(connectionName);
+  var connection = registry.connection(connectionName);
+  var url = urlForConfig(connection);
   var db = nano(url);
-
   db.db.destroy(collectionName, cb);
 };
 
@@ -257,15 +255,15 @@ function find(connectionName, collectionName, options, cb, round) {
   if (options.skip) dbOptions.skip = options.skip;
 
   var queriedAttributes = Object.keys(options.where || {});
-	//console.log("Queried Attributes: ",queriedAttributes);
+  //console.log("Queried Attributes: ",queriedAttributes);
 
   if (queriedAttributes.length == 0) {
-		//console.log("Queried Attributes doesn't contain any values");
+    //console.log("Queried Attributes doesn't contain any values");
     /// All docs
     dbOptions.include_docs = true;
     db.list(dbOptions, listReplied);
   } else if (queriedAttributes.length == 1 && (queriedAttributes[0] == 'id' || queriedAttributes[0] == '_id')) {
-		var id = options.where.id || options.where._id;
+    var id = options.where.id || options.where._id;
 
     /// One doc by id
     db.get(id, dbOptions, function(err, doc) {
@@ -279,14 +277,14 @@ function find(connectionName, collectionName, options, cb, round) {
       }
     });
   } else if (options.where.like) {
-		//console.log("Query by where: ",options.where.like);
+    //console.log("Query by where: ",options.where.like);
     var viewName = views.name(options.where.like);
     var value = views.likeValue(options.where.like, true);
     dbOptions.startkey = value.startkey;
     dbOptions.endkey = value.endkey;
     db.view('views', viewName, dbOptions, viewResult);
   } else {
-		//console.log("Lets look with a view: ",options.where);
+    //console.log("Lets look with a view: ",options.where);
     var viewName = views.name(options.where);
     dbOptions.key = views.value(options.where);
     db.view('views', viewName, dbOptions, viewResult);
@@ -353,30 +351,32 @@ adapter.create = function create(connectionName, collectionName, values, cb) {
  */
 adapter.update = function update(connectionName, collectionName, options, values, cb) {
 
-	adapter.merge(connectionName,collectionName,values.id,values,replied,1);
-	/*
-	adapter.merge = function adapterMerge(connectionName, collectionName, id, attrs, cb, attempts) {
-
   var searchAttributes = Object.keys(options.where);
   if (searchAttributes.length != 1)
     return cb(new Error('only support updating one object by id'));
   if (searchAttributes[0] != 'id')
     return cb(new Error('only support updating one object by id'));
 
-  var db = registry.db(collectionName);
+  // Find the document
+  adapter.find(connectionName, collectionName, options, function(err,docs) {
+    var doc = docs[0]; // only one document with that id
+    if(!doc) return cb('No document found to update.');
 
-	console.log("Saving "+collectionName+" with id ",options,values);
+    delete values.id; // deleting id from values attr
+    Object.keys(values).forEach(function(key) {
+      doc[key] = values[key];
+    });
 
-  db.insert(docForIngestion(values), options.where.id, replied);
-	*/
-
-  function replied(err, reply) {
-    if (err) cb(err);
-    else {
-      var attrs = extend({}, values, { _id: reply.id, _rev: reply.rev });
-      cb(null, docForReply(attrs));
-    }
-  }
+    //console.log('Document to update: ', doc);
+    var db = registry.db(collectionName);
+    db.insert(docForIngestion(doc), options.where.id, function(err, reply) {
+      if (err) cb(err);
+      else {
+        var attrs = extend({}, doc, { _id: reply.id, _rev: reply.rev });
+        cb(null, docForReply(attrs));
+      }
+    });
+  });
 };
 
 
@@ -390,13 +390,16 @@ adapter.update = function update(connectionName, collectionName, options, values
  * @return {[type]}                  [description]
  */
 adapter.destroy = function destroy(connectionName, collectionName, options, cb) {
-	// Find the record
   var db = registry.db(collectionName);
-	adapter.find(connectionName,collectionName,options, function(err,docs) {
-		async.each(docs,function(item,localCb) {
-			db.destroy(item.id,item.rev,localCb);
-		},cb);
-	});
+
+  // Find the record
+  adapter.find(connectionName,collectionName,options, function(err,docs) {
+    async.each(docs,function(item) { // Shoud have only one.
+      db.destroy(item.id, item.rev, function(err, doc) {
+        cb(err,[doc]); // Waterline expects an array as result.
+      });
+    });
+  });
 };
 
 
@@ -447,19 +450,19 @@ adapter.merge = function adapterMerge(connectionName, collectionName, id, attrs,
   var db = registry.db(collectionName);
 
   var coll = registry.collection(collectionName);
-	/*
-	console.log('------------------------------------------');
-	console.log('Attempting merge on ',collectionName,id,attrs);
-	console.log('------------------------------------------');
-	*/
+  /*
+  console.log('------------------------------------------');
+  console.log('Attempting merge on ',collectionName,id,attrs);
+  console.log('------------------------------------------');
+  */
 
   if ('number' != typeof attempts) attempts = 0;
   else if (attempts > 0) {
-    var config = coll.adapter.config;
-		// Reference to maxMergeAttempts
+    //var config = coll.adapter.config;
+    // Reference to maxMergeAttempts
     if (attempts > 5) {
       return cb(new Error('max attempts of merging reached'));
-		}
+    }
   }
 
   db.get(id, got);
@@ -473,28 +476,28 @@ adapter.merge = function adapterMerge(connectionName, collectionName, id, attrs,
     _doc = docForReply(_doc);
 
     doc = merge(_doc, attrs);
-		//console.log('----------Callbacks',coll._callbacks.beforeUpdate);
+    //console.log('----------Callbacks',coll._callbacks.beforeUpdate);
     async.eachSeries(coll._callbacks.beforeUpdate || [], invokeCallback, afterBeforeUpdate);
   }
 
   function invokeCallback(fn, cb) {
-		//console.log("----------Calling Function ",fn);
+    //console.log("----------Calling Function ",fn);
     fn.call(null, doc, cb);
   }
 
   function afterBeforeUpdate(err) {
     if (err) return cb(err);
 
-		var newdoc = docForIngestion(doc);
-		//console.log('----------Heres our final doc',newdoc._id,newdoc._rev);
-		//console.trace();
+    var newdoc = docForIngestion(doc);
+    //console.log('----------Heres our final doc',newdoc._id,newdoc._rev);
+    console.trace();
 
     db.insert(newdoc, id, saved);
   }
 
   function saved(err, reply) {
     if (err && err.status_code == 409) {
-			//console.log('Calling merge again!');
+      //console.log('Calling merge again!');
       adapter.merge(connectionName, collectionName, id, attrs, cb, attempts + 1)
     }
     else if (err) cb(err);
