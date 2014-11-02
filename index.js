@@ -214,7 +214,39 @@ adapter.drop = function drop(connectionName, collectionName, relations, cb) {
  * @param  {Function} cb             [description]
  * @return {[type]}                  [description]
  */
+
+
+
 adapter.find = find;
+
+// function _experimental_find(connectionName, collectionName, criteria, cb, round) {
+//   return _normalizedFind({
+//     datastoreIdentity: connectionName,
+//     cid: collectionName,
+//     where: criteria.where,
+//     limit: criteria.limit,
+//     skip: criteria.skip,
+//     sort: criteria.sort,
+//     round: round
+//   }, cb);
+// }
+
+
+// function _normalizedFind(opts, cb) {
+//   var id = options.where.id || options.where._id;
+
+//     /// One doc by id
+//     db.get(id, dbOptions, function(err, doc) {
+//       if (err && err.status_code == 404) cb(null, []);
+//       else if (err) cb(err);
+//       else {
+//         var docs;
+//         if (doc) docs = [doc];
+//         else docs = [];
+//         cb(null, docs.map(docForReply));
+//       }
+//     });
+// }
 
 function find(connectionName, collectionName, options, cb, round) {
   if ('number' != typeof round) round = 0;
@@ -242,14 +274,14 @@ function find(connectionName, collectionName, options, cb, round) {
 
     /// One doc by id
     db.get(id, dbOptions, function(err, doc) {
-      if (err && err.status_code == 404) cb(null, []);
-      else if (err) cb(err);
-      else {
-        var docs;
-        if (doc) docs = [doc];
-        else docs = [];
-        cb(null, docs.map(docForReply));
+      if (err) {
+        if (err.status_code == 404) {
+          return cb(null, []);
+        }
+        return cb(err);
       }
+      var docs = doc ? [doc] : [];
+      return cb(null, docs.map(docForReply));
     });
   }
   else if (options.where.like) {
