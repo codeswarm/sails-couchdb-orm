@@ -122,10 +122,10 @@ adapter.registerConnection = function registerConnection(connection, collections
   var db = nano(url);
 
   // Save the connection
-  registry.connection(connection.identity,connection);
+  registry.connection(connection.identity, connection);
 
-  async.each(_.keys(collections),function(model,next) {
-    adapter.registerSingleCollection(connection, model, collections[model], next);
+  async.each(_.keys(collections),function(modelIdentity,next) {
+    adapter.registerSingleCollection(connection, modelIdentity, collections[modelIdentity], next);
   }, function afterAsyncEach (err) {
     if(err) {
       return cb(new Error("Problem when registering Collections"));
@@ -147,28 +147,42 @@ adapter.registerConnection = function registerConnection(connection, collections
 adapter.registerSingleCollection = function registerCollection(connection, collectionName, collection, cb) {
 
   var url = urlForConfig(connection);
+
+  // Wire up nano to the configured couchdb connection
   var db = nano(url);
 
-  db.db.get(collectionName, gotDatabase);
+  // console.log('registering %s', collectionName);
+  // console.log('got db.db or whatever', db);
+  // console.log('urlForConfig', url,connection);
 
-  function gotDatabase(err) {
-    if (err && err.status_code == 404 && err.reason == 'no_db_file') {
-      db.db.create(collectionName, createdDB);
-    } else {
+  db.db.get(collectionName, function gotDatabase(err) {
+
+    // No error means we're good!  The collection (or in couch terms, the "db")
+    // is already known and ready to use.
+    if (!err) {
       registry.collection(collectionName, collection);
       registry.db(collectionName, nano(url + collectionName));
-      cb();
+      return cb();
     }
-  }
 
-  function createdDB(err) {
-    if (err) {
-      cb(err);
+    try {
+      if (err.status_code == 404 && err.reason == 'no_db_file') {
+        db.db.create(collectionName, function createdDB(err) {
+          if (err) {
+            return cb(err);
+          }
+
+          adapter.registerSingleCollection(connection, collectionName, collection, cb);
+        });
+        return;
+      }
+      // console.log('unexpected ERROR', err);
+      return cb(err);
     }
-    else {
-      adapter.registerSingleCollection(connection, collectionName, collection, cb);
-    }
-  }
+    catch (e) { return cb(e); }
+
+  });
+
 };
 
 

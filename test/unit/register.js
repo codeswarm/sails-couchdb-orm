@@ -10,22 +10,22 @@ describe('registerConnection', function() {
 
   it('should not hang or encounter any errors', function(done) {
     adapter.registerConnection({
-      identity: 'foo',
+      identity: 'public npm registry',
       adapter: {
         config: {}
-      }
+      },
+      host: 'registry.npmjs.org',
+      port: 80
     }, {
-      jambone: {}
+      registry: {
+        identity: 'registry'
+      }
     }, cb);
 
     function cb(err) {
       if (err) {
         return done(err);
       }
-
-      assert.ok(registry.db('foo'));
-
-      assert.ok(registry.collection('jambone'));
 
       done();
     }
