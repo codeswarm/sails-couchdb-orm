@@ -1,30 +1,30 @@
 /**
  * Test dependencies
  */
-var adapter  = require('../../');
+var adapter = require('../../');
 var registry = require('../../registry');
-var assert   = require('assert');
+var assert = require('assert');
 
 
-describe('registerCollection', function () {
+describe('registerConnection', function() {
 
-	it('should not hang or encounter any errors', function (done) {
-		adapter.registerCollection({
+	it('should not hang or encounter any errors', function(done) {
+		adapter.registerConnection({
 			identity: 'foo',
-      adapter: {
-        config: {}
-      }
+			adapter: {
+				config: {}
+			}
 		}, cb);
 
-    function cb(err) {
-      if (err) throw err;
+		function cb(err) {
+			if (err) throw err;
 
-      assert.ok(registry.db('foo'));
+			assert.ok(registry.db('foo'));
 
-      assert.ok(registry.collection('foo'));
+			assert.ok(registry.collection('foo'));
 
-      done();
-    }
+			done();
+		}
 
 	});
 
