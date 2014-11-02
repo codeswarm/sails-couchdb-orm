@@ -201,7 +201,6 @@ adapter.drop = function drop(connectionName, collectionName, relations, cb) {
 
 
 /**
- *
  * REQUIRED method if users expect to call Model.find(), Model.findOne(),
  * or related.
  *
@@ -209,46 +208,16 @@ adapter.drop = function drop(connectionName, collectionName, relations, cb) {
  * Waterline core will take care of supporting all the other different
  * find methods/usages.
  *
+ * @param  {[type]}   connectionName [description]
  * @param  {[type]}   collectionName [description]
- * @param  {[type]}   options        [description]
+ * @param  {[type]}   criteria       [description]
  * @param  {Function} cb             [description]
  * @return {[type]}                  [description]
  */
 
-
-
 adapter.find = find;
 
-// function _experimental_find(connectionName, collectionName, criteria, cb, round) {
-//   return _normalizedFind({
-//     datastoreIdentity: connectionName,
-//     cid: collectionName,
-//     where: criteria.where,
-//     limit: criteria.limit,
-//     skip: criteria.skip,
-//     sort: criteria.sort,
-//     round: round
-//   }, cb);
-// }
-
-
-// function _normalizedFind(opts, cb) {
-//   var id = options.where.id || options.where._id;
-
-//     /// One doc by id
-//     db.get(id, dbOptions, function(err, doc) {
-//       if (err && err.status_code == 404) cb(null, []);
-//       else if (err) cb(err);
-//       else {
-//         var docs;
-//         if (doc) docs = [doc];
-//         else docs = [];
-//         cb(null, docs.map(docForReply));
-//       }
-//     });
-// }
-
-function find(connectionName, collectionName, options, cb, round) {
+function find(connectionName, collectionName, criteria, cb, round) {
   if ('number' != typeof round) round = 0;
 
   // If you need to access your private data for this collection:
@@ -269,18 +238,26 @@ function find(connectionName, collectionName, options, cb, round) {
     })());
   }
 
-  var dbOptions = {};
-  if (options.limit) dbOptions.limit = options.limit;
-  if (options.skip) dbOptions.skip = options.skip;
+  // Build initial `dbOptions`
+  var dbOptions = (function (dbOptions){
+    if (criteria.limit) dbOptions.limit = criteria.limit;
+    if (criteria.skip) dbOptions.skip = criteria.skip;
+    return dbOptions;
+  })({});
 
-  var queriedAttributes = Object.keys(options.where || {});
+  var queriedAttributes = Object.keys(criteria.where || {});
   //console.log("Queried Attributes: ",queriedAttributes);
 
+  // Handle case where no criteria is specified at all
+  // (list all documents in the couch collection)
   if (queriedAttributes.length === 0) {
     console.log('Queried Attributes" (aka criteria\'s WHERE clause) doesn\'t contain any values-- listing everything!');
 
     // All docs
     dbOptions.include_docs = true;
+    // TODO: test if limit works?
+    // TODO: test if skip works?
+    // TODO: test if sort works?
     db.list(dbOptions, function listReplied(err, docs) {
       if (err) {
         return cb(err);
@@ -300,7 +277,7 @@ function find(connectionName, collectionName, options, cb, round) {
 
   // Handle query for a single doc using the provided primary key criteria (e.g. `findOne()`)
   if (queriedAttributes.length == 1 && (queriedAttributes[0] == 'id' || queriedAttributes[0] == '_id')) {
-    var id = options.where.id || options.where._id;
+    var id = criteria.where.id || criteria.where._id;
 
     db.get(id, dbOptions, function(err, doc) {
       if (err) {
@@ -315,13 +292,13 @@ function find(connectionName, collectionName, options, cb, round) {
     return;
   }
 
-  // Take a look at `options.where.like`...
-  asyncx_ifTruthy(options.where.like,
+  // Take a look at `criteria.where.like`...
+  asyncx_ifTruthy(criteria.where.like,
 
     // Handle "like" modifier using a view
     function ifSoDo(next){
-      var viewName = views.name(options.where.like);
-      var value = views.likeValue(options.where.like, true);
+      var viewName = views.name(criteria.where.like);
+      var value = views.likeValue(criteria.where.like, true);
       dbOptions.startkey = value.startkey;
       dbOptions.endkey = value.endkey;
       return db.view('views', viewName, dbOptions, next);
@@ -329,17 +306,19 @@ function find(connectionName, collectionName, options, cb, round) {
 
     // Handle general-case criteria queries using a view
     function elseDo (next){
-      var viewName = views.name(options.where);
-      dbOptions.key = views.value(options.where);
+      var viewName = views.name(criteria.where);
+      dbOptions.key = views.value(criteria.where);
       return db.view('views', viewName, dbOptions, next);
     },
 
     function finallyDo(err, reply) {
       if (err) {
         if (err.status_code === 404 && round < 1) {
-          views.create(db, options.where.like || options.where, function createdView(err) {
-            if (err) cb(err);
-            else find.call(connectionName, connectionName, collectionName, options, cb, round + 1);
+          views.create(db, criteria.where.like || criteria.where, function createdView(err) {
+            if (err) {
+              return cb(err);
+            }
+            find.call(connectionName, connectionName, collectionName, criteria, cb, round + 1);
           });
           return;
         }
