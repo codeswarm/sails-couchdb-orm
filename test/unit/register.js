@@ -8,29 +8,29 @@ var assert = require('assert');
 
 describe('registerConnection', function() {
 
-	it('should not hang or encounter any errors', function(done) {
-		adapter.registerConnection({
-			identity: 'foo',
-			adapter: {
-				config: {}
-			}
-		}, cb);
+  it('should not hang or encounter any errors', function(done) {
+    adapter.registerConnection({
+      identity: 'foo',
+      adapter: {
+        config: {}
+      }
+    }, cb);
 
-		function cb(err) {
-			if (err) throw err;
+    function cb(err) {
+      if (err) throw err;
 
-			assert.ok(registry.db('foo'));
+      assert.ok(registry.db('foo'));
 
-			assert.ok(registry.collection('foo'));
+      assert.ok(registry.collection('foo'));
 
-			done();
-		}
+      done();
+    }
 
-	});
+  });
 
 
-	// e.g.
-	// it('should create a mysql connection pool', function () {})
-	// it('should create an HTTP connection pool', function () {})
-	// ... and so on.
+  // e.g.
+  // it('should create a mysql connection pool', function () {})
+  // it('should create an HTTP connection pool', function () {})
+  // ... and so on.
 });
