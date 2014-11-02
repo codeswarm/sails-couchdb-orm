@@ -1,3 +1,7 @@
+/**
+ * Module dependencies
+ */
+
 var nano      = require('nano');
 var async     = require('async');
 var extend    = require('xtend');
@@ -12,50 +16,10 @@ var merge = DeepMerge(function(a, b) {
 var registry = require('./registry');
 var views    = require('./views');
 
-/**
- * Sails Boilerplate Adapter
- *
- * Most of the methods below are optional.
- *
- * If you don't need / can't get to every method, just implement
- * what you have time for.  The other methods will only fail if
- * you try to call them!
- *
- * For many adapters, this file is all you need.  For very complex adapters, you may need more flexiblity.
- * In any case, it's probably a good idea to start with one file and refactor only if necessary.
- * If you do go that route, it's conventional in Node to create a `./lib` directory for your private submodules
- * and load them at the top of the file with other dependencies.  e.g. var update = `require('./lib/update')`;
- */
+
 
 // You'll want to maintain a reference to each collection
 // (aka model) that gets registered with this adapter.
-
-
-
-// You may also want to store additional, private data
-// per-collection (esp. if your data store uses persistent
-// connections).
-//
-// Keep in mind that models can be configured to use different databases
-// within the same app, at the same time.
-//
-// i.e. if you're writing a MariaDB adapter, you should be aware that one
-// model might be configured as `host="localhost"` and another might be using
-// `host="foo.com"` at the same time.  Same thing goes for user, database,
-// password, or any other config.
-//
-// You don't have to support this feature right off the bat in your
-// adapter, but it ought to get done eventually.
-//
-// Sounds annoying to deal with...
-// ...but it's not bad.  In each method, acquire a connection using the config
-// for the current model (looking it up from `_modelReferences`), establish
-// a connection, then tear it down before calling your method's callback.
-// Finally, as an optimization, you might use a db pool for each distinct
-// connection configuration, partioning pools for each separate configuration
-// for your adapter (i.e. worst case scenario is a pool for each model, best case
-// scenario is one single single pool.)  For many databases, any change to
-// host OR database OR user OR password = separate pool.
 
 
 
@@ -265,12 +229,15 @@ function find(connectionName, collectionName, options, cb, round) {
   var queriedAttributes = Object.keys(options.where || {});
   //console.log("Queried Attributes: ",queriedAttributes);
 
-  if (queriedAttributes.length == 0) {
+  var viewName;
+
+  if (queriedAttributes.length === 0) {
     //console.log("Queried Attributes doesn't contain any values");
     /// All docs
     dbOptions.include_docs = true;
     db.list(dbOptions, listReplied);
-  } else if (queriedAttributes.length == 1 && (queriedAttributes[0] == 'id' || queriedAttributes[0] == '_id')) {
+  }
+  else if (queriedAttributes.length == 1 && (queriedAttributes[0] == 'id' || queriedAttributes[0] == '_id')) {
     var id = options.where.id || options.where._id;
 
     /// One doc by id
@@ -284,26 +251,34 @@ function find(connectionName, collectionName, options, cb, round) {
         cb(null, docs.map(docForReply));
       }
     });
-  } else if (options.where.like) {
+  }
+  else if (options.where.like) {
     //console.log("Query by where: ",options.where.like);
-    var viewName = views.name(options.where.like);
+    viewName = views.name(options.where.like);
     var value = views.likeValue(options.where.like, true);
     dbOptions.startkey = value.startkey;
     dbOptions.endkey = value.endkey;
     db.view('views', viewName, dbOptions, viewResult);
-  } else {
+  }
+  else {
     //console.log("Lets look with a view: ",options.where);
-    var viewName = views.name(options.where);
+    viewName = views.name(options.where);
     dbOptions.key = views.value(options.where);
     db.view('views', viewName, dbOptions, viewResult);
   }
 
   function listReplied(err, docs) {
-    if (err) cb(err);
-    else {
-      if (!Array.isArray(docs) && docs.rows) docs = docs.rows.map(prop('doc'));
-      cb(null, docs.map(docForReply))
-    };
+    if (err) {
+      return cb(err);
+    }
+
+    if (!Array.isArray(docs) && docs.rows) {
+      docs = docs.rows.map(prop('doc'));
+    }
+    else {}
+
+    // either way...
+    return cb(null, docs.map(docForReply));
   }
 
   function viewResult(err, reply) {
@@ -318,7 +293,7 @@ function find(connectionName, collectionName, options, cb, round) {
     else find.call(connectionName, connectionName, collectionName, options, cb, round + 1);
   }
 
-};
+}
 
 
 /**
@@ -506,7 +481,7 @@ adapter.merge = function adapterMerge(connectionName, collectionName, id, attrs,
   function saved(err, reply) {
     if (err && err.status_code == 409) {
       //console.log('Calling merge again!');
-      adapter.merge(connectionName, collectionName, id, attrs, cb, attempts + 1)
+      adapter.merge(connectionName, collectionName, id, attrs, cb, attempts + 1);
     }
     else if (err) cb(err);
     else {
