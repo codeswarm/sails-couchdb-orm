@@ -276,18 +276,32 @@ function find(connectionName, collectionName, options, cb, round) {
   var queriedAttributes = Object.keys(options.where || {});
   //console.log("Queried Attributes: ",queriedAttributes);
 
-  var viewName;
-
   if (queriedAttributes.length === 0) {
-    //console.log("Queried Attributes doesn't contain any values");
-    /// All docs
+    console.log('Queried Attributes" (aka criteria\'s WHERE clause) doesn\'t contain any values-- listing everything!');
+
+    // All docs
     dbOptions.include_docs = true;
-    db.list(dbOptions, listReplied);
+    db.list(dbOptions, function listReplied(err, docs) {
+      if (err) {
+        return cb(err);
+      }
+
+      if (!Array.isArray(docs) && docs.rows) {
+        docs = docs.rows.map(prop('doc'));
+      }
+      else {}
+
+      // either way...
+      return cb(null, docs.map(docForReply));
+    });
+    return;
   }
-  else if (queriedAttributes.length == 1 && (queriedAttributes[0] == 'id' || queriedAttributes[0] == '_id')) {
+
+
+  // Handle query for a single doc using the provided primary key criteria (e.g. `findOne()`)
+  if (queriedAttributes.length == 1 && (queriedAttributes[0] == 'id' || queriedAttributes[0] == '_id')) {
     var id = options.where.id || options.where._id;
 
-    /// One doc by id
     db.get(id, dbOptions, function(err, doc) {
       if (err) {
         if (err.status_code == 404) {
@@ -298,47 +312,45 @@ function find(connectionName, collectionName, options, cb, round) {
       var docs = doc ? [doc] : [];
       return cb(null, docs.map(docForReply));
     });
-  }
-  else if (options.where.like) {
-    //console.log("Query by where: ",options.where.like);
-    viewName = views.name(options.where.like);
-    var value = views.likeValue(options.where.like, true);
-    dbOptions.startkey = value.startkey;
-    dbOptions.endkey = value.endkey;
-    db.view('views', viewName, dbOptions, viewResult);
-  }
-  else {
-    //console.log("Lets look with a view: ",options.where);
-    viewName = views.name(options.where);
-    dbOptions.key = views.value(options.where);
-    db.view('views', viewName, dbOptions, viewResult);
+    return;
   }
 
-  function listReplied(err, docs) {
-    if (err) {
-      return cb(err);
+  // Take a look at `options.where.like`...
+  asyncx_ifTruthy(options.where.like,
+
+    // Handle "like" modifier using a view
+    function ifSoDo(next){
+      var viewName = views.name(options.where.like);
+      var value = views.likeValue(options.where.like, true);
+      dbOptions.startkey = value.startkey;
+      dbOptions.endkey = value.endkey;
+      return db.view('views', viewName, dbOptions, next);
+    },
+
+    // Handle general-case criteria queries using a view
+    function elseDo (next){
+      var viewName = views.name(options.where);
+      dbOptions.key = views.value(options.where);
+      return db.view('views', viewName, dbOptions, next);
+    },
+
+    function finallyDo(err, reply) {
+      if (err) {
+        if (err.status_code === 404 && round < 1) {
+          views.create(db, options.where.like || options.where, function createdView(err) {
+            if (err) cb(err);
+            else find.call(connectionName, connectionName, collectionName, options, cb, round + 1);
+          });
+          return;
+        }
+
+        return cb(err);
+      }
+
+      return cb(null, reply.rows.map(prop('value')).map(docForReply));
     }
+  );
 
-    if (!Array.isArray(docs) && docs.rows) {
-      docs = docs.rows.map(prop('doc'));
-    }
-    else {}
-
-    // either way...
-    return cb(null, docs.map(docForReply));
-  }
-
-  function viewResult(err, reply) {
-    if (err && err.status_code == 404 && round < 1)
-      views.create(db, options.where.like || options.where, createdView);
-    else if (err) cb(err);
-    else cb(null, reply.rows.map(prop('value')).map(docForReply));
-  }
-
-  function createdView(err) {
-    if (err) cb(err);
-    else find.call(connectionName, connectionName, collectionName, options, cb, round + 1);
-  }
 
 }
 
@@ -646,5 +658,19 @@ function docForIngestion(doc) {
   }
 
   return doc;
+}
+
+
+
+/**
+ * Branch to the appropriate fn if the provided value is truthy.
+ *
+ * @param  {*} valToTest
+ * @param  {Function} ifSoDo(next)
+ * @param  {Function} elseDo(next)
+ * @param  {Function} finallyDo(err, results)
+ */
+function asyncx_ifTruthy (valToTest, ifSoDo, elseDo, finallyDo){
+  return (valToTest ? ifSoDo : elseDo)(finallyDo);
 }
 
