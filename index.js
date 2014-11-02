@@ -254,6 +254,21 @@ function find(connectionName, collectionName, options, cb, round) {
   // If you need to access your private data for this collection:
   var db = registry.db(collectionName);
 
+  console.log('GETTING DB FOR "%s"."%s"', connectionName, collectionName);
+  // console.log('got: ',db);
+  if (!db) {
+    return cb((function buildError(){
+      var e = new Error();
+      e.name = 'Adapter Error';
+      e.type = 'adapter';
+      e.code = 'E_ADAPTER';
+      e.message = util.format('Could not acquire data access object (`db`) object for CouchDB connection "%s" for collection "%s"', connectionName, collectionName);
+      e.connectionName = connectionName;
+      e.collectionName = collectionName;
+      return e;
+    })());
+  }
+
   var dbOptions = {};
   if (options.limit) dbOptions.limit = options.limit;
   if (options.skip) dbOptions.skip = options.skip;
