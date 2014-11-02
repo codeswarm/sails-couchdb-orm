@@ -14,14 +14,18 @@ describe('registerConnection', function() {
       adapter: {
         config: {}
       }
+    }, {
+      jambone: {}
     }, cb);
 
     function cb(err) {
-      if (err) throw err;
+      if (err) {
+        return done(err);
+      }
 
       assert.ok(registry.db('foo'));
 
-      assert.ok(registry.collection('foo'));
+      assert.ok(registry.collection('jambone'));
 
       done();
     }

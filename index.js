@@ -64,7 +64,7 @@ var adapter = exports;
 // Set to true if this adapter supports (or requires) things like data types, validations, keys, etc.
 // If true, the schema for models using this adapter will be automatically synced when the server starts.
 // Not terribly relevant if your data store is not SQL/schemaful.
-adapter.syncable = false,
+adapter.syncable = false;
 
 
 // Reserved attributes.
@@ -124,20 +124,14 @@ adapter.registerConnection = function registerConnection(connection, collections
   // Save the connection
   registry.connection(connection.identity,connection);
 
-  //console.log(Object.keys(collections));
-  async.each(Object.keys(collections),function(model,cb) {
-    //console.log("Register "+model);
-    adapter.registerSingleCollection(connection,model,collections[model],cb);
-  }, function(err) {
-    //console.log(err);
+  async.each(_.keys(collections),function(model,next) {
+    adapter.registerSingleCollection(connection, model, collections[model], next);
+  }, function afterAsyncEach (err) {
     if(err) {
-      //console.log("Problem!");
-      cb(new Error("Problem when registering Collections"));
+      return cb(new Error("Problem when registering Collections"));
     }
-    else {
-      //console.log("Success registering connections!");
-      cb();
-    }
+
+    return cb();
   });
 };
 
@@ -202,7 +196,7 @@ adapter.teardown = function teardown(connection, cb) {
  */
 adapter.describe = function describe(connection, collectionName, cb) {
   var collection = registry.collection(collectionName);
-  if (! collection) 
+  if (! collection)
     return cb(new Error('no such collection'));
 
   return cb(null, collection.definition);
