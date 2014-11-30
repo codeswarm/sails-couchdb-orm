@@ -1,10 +1,10 @@
 {
-  "name": "sails-couchdb-orm",
+  "name": "sails-couchdb",
   "version": "0.10.3",
   "description": "CouchDB adapter for Sails",
   "main": "index.js",
   "scripts": {
-    "test": "node_modules/.bin/mocha test/unit && node test/integration/runner -R spec -b"
+    "test": "node_modules/.bin/mocha test/unit -t 10000 && node test/integration/runner -R spec -b"
   },
   "repository": {
     "type": "git",
@@ -26,7 +26,8 @@
     "Mike Hostetler <mike.hostetler@gmail.com>"
   ],
   "contributors": [
-    "Matheus Hoffmann Silva <hoffmann.matheus@gmail.com>"
+    "Matheus Hoffmann Silva <hoffmann.matheus@gmail.com>",
+    "Mike McNeil <@mikermcneil>"
   ],
   "license": "MIT",
   "readmeFilename": "README.md",

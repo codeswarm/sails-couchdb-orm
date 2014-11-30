@@ -1,3 +1,7 @@
+/**
+ * Module dependencies
+ */
+
 var nano      = require('nano');
 var async     = require('async');
 var extend    = require('xtend');
@@ -12,50 +16,10 @@ var merge = DeepMerge(function(a, b) {
 var registry = require('./registry');
 var views    = require('./views');
 
-/**
- * Sails Boilerplate Adapter
- *
- * Most of the methods below are optional.
- *
- * If you don't need / can't get to every method, just implement
- * what you have time for.  The other methods will only fail if
- * you try to call them!
- *
- * For many adapters, this file is all you need.  For very complex adapters, you may need more flexiblity.
- * In any case, it's probably a good idea to start with one file and refactor only if necessary.
- * If you do go that route, it's conventional in Node to create a `./lib` directory for your private submodules
- * and load them at the top of the file with other dependencies.  e.g. var update = `require('./lib/update')`;
- */
+
 
 // You'll want to maintain a reference to each collection
 // (aka model) that gets registered with this adapter.
-
-
-
-// You may also want to store additional, private data
-// per-collection (esp. if your data store uses persistent
-// connections).
-//
-// Keep in mind that models can be configured to use different databases
-// within the same app, at the same time.
-//
-// i.e. if you're writing a MariaDB adapter, you should be aware that one
-// model might be configured as `host="localhost"` and another might be using
-// `host="foo.com"` at the same time.  Same thing goes for user, database,
-// password, or any other config.
-//
-// You don't have to support this feature right off the bat in your
-// adapter, but it ought to get done eventually.
-//
-// Sounds annoying to deal with...
-// ...but it's not bad.  In each method, acquire a connection using the config
-// for the current model (looking it up from `_modelReferences`), establish
-// a connection, then tear it down before calling your method's callback.
-// Finally, as an optimization, you might use a db pool for each distinct
-// connection configuration, partioning pools for each separate configuration
-// for your adapter (i.e. worst case scenario is a pool for each model, best case
-// scenario is one single single pool.)  For many databases, any change to
-// host OR database OR user OR password = separate pool.
 
 
 
@@ -64,7 +28,7 @@ var adapter = exports;
 // Set to true if this adapter supports (or requires) things like data types, validations, keys, etc.
 // If true, the schema for models using this adapter will be automatically synced when the server starts.
 // Not terribly relevant if your data store is not SQL/schemaful.
-adapter.syncable = false,
+adapter.syncable = false;
 
 
 // Reserved attributes.
@@ -122,22 +86,16 @@ adapter.registerConnection = function registerConnection(connection, collections
   var db = nano(url);
 
   // Save the connection
-  registry.connection(connection.identity,connection);
+  registry.connection(connection.identity, connection);
 
-  //console.log(Object.keys(collections));
-  async.each(Object.keys(collections),function(model,cb) {
-    //console.log("Register "+model);
-    adapter.registerSingleCollection(connection,model,collections[model],cb);
-  }, function(err) {
-    //console.log(err);
+  async.each(_.keys(collections),function(modelIdentity,next) {
+    adapter.registerSingleCollection(connection, modelIdentity, collections[modelIdentity], next);
+  }, function afterAsyncEach (err) {
     if(err) {
-      //console.log("Problem!");
-      cb(new Error("Problem when registering Collections"));
+      return cb(new Error("Problem when registering Collections"));
     }
-    else {
-      //console.log("Success registering connections!");
-      cb();
-    }
+
+    return cb();
   });
 };
 
@@ -153,28 +111,42 @@ adapter.registerConnection = function registerConnection(connection, collections
 adapter.registerSingleCollection = function registerCollection(connection, collectionName, collection, cb) {
 
   var url = urlForConfig(connection);
+
+  // Wire up nano to the configured couchdb connection
   var db = nano(url);
 
-  db.db.get(collectionName, gotDatabase);
+  // console.log('registering %s', collectionName);
+  // console.log('got db.db or whatever', db);
+  // console.log('urlForConfig', url,connection);
 
-  function gotDatabase(err) {
-    if (err && err.status_code == 404 && err.reason == 'no_db_file') {
-      db.db.create(collectionName, createdDB);
-    } else {
+  db.db.get(collectionName, function gotDatabase(err) {
+
+    // No error means we're good!  The collection (or in couch terms, the "db")
+    // is already known and ready to use.
+    if (!err) {
       registry.collection(collectionName, collection);
       registry.db(collectionName, nano(url + collectionName));
-      cb();
+      return cb();
     }
-  }
 
-  function createdDB(err) {
-    if (err) {
-      cb(err);
+    try {
+      if (err.status_code == 404 && err.reason == 'no_db_file') {
+        db.db.create(collectionName, function createdDB(err) {
+          if (err) {
+            return cb(err);
+          }
+
+          adapter.registerSingleCollection(connection, collectionName, collection, cb);
+        });
+        return;
+      }
+      // console.log('unexpected ERROR', err);
+      return cb(err);
     }
-    else {
-      adapter.registerSingleCollection(connection, collectionName, collection, cb);
-    }
-  }
+    catch (e) { return cb(e); }
+
+  });
+
 };
 
 
@@ -202,7 +174,7 @@ adapter.teardown = function teardown(connection, cb) {
  */
 adapter.describe = function describe(connection, collectionName, cb) {
   var collection = registry.collection(collectionName);
-  if (! collection) 
+  if (! collection)
     return cb(new Error('no such collection'));
 
   return cb(null, collection.definition);
@@ -229,7 +201,6 @@ adapter.drop = function drop(connectionName, collectionName, relations, cb) {
 
 
 /**
- *
  * REQUIRED method if users expect to call Model.find(), Model.findOne(),
  * or related.
  *
@@ -237,80 +208,130 @@ adapter.drop = function drop(connectionName, collectionName, relations, cb) {
  * Waterline core will take care of supporting all the other different
  * find methods/usages.
  *
+ * @param  {[type]}   connectionName [description]
  * @param  {[type]}   collectionName [description]
- * @param  {[type]}   options        [description]
+ * @param  {[type]}   criteria       [description]
  * @param  {Function} cb             [description]
  * @return {[type]}                  [description]
  */
+
 adapter.find = find;
 
-function find(connectionName, collectionName, options, cb, round) {
+function find(connectionName, collectionName, criteria, cb, round) {
   if ('number' != typeof round) round = 0;
 
   // If you need to access your private data for this collection:
   var db = registry.db(collectionName);
 
-  var dbOptions = {};
-  if (options.limit) dbOptions.limit = options.limit;
-  if (options.skip) dbOptions.skip = options.skip;
+  console.log('GETTING DB FOR "%s"."%s"', connectionName, collectionName);
+  // console.log('got: ',db);
+  if (!db) {
+    return cb((function buildError(){
+      var e = new Error();
+      e.name = 'Adapter Error';
+      e.type = 'adapter';
+      e.code = 'E_ADAPTER';
+      e.message = util.format('Could not acquire data access object (`db`) object for CouchDB connection "%s" for collection "%s"', connectionName, collectionName);
+      e.connectionName = connectionName;
+      e.collectionName = collectionName;
+      return e;
+    })());
+  }
 
-  var queriedAttributes = Object.keys(options.where || {});
+  // Build initial `dbOptions`
+  var dbOptions = (function (dbOptions){
+    if (criteria.limit) dbOptions.limit = criteria.limit;
+    if (criteria.skip) dbOptions.skip = criteria.skip;
+    return dbOptions;
+  })({});
+
+  var queriedAttributes = Object.keys(criteria.where || {});
   //console.log("Queried Attributes: ",queriedAttributes);
 
-  if (queriedAttributes.length == 0) {
-    //console.log("Queried Attributes doesn't contain any values");
-    /// All docs
+  // Handle case where no criteria is specified at all
+  // (list all documents in the couch collection)
+  if (queriedAttributes.length === 0) {
+    console.log('Queried Attributes" (aka criteria\'s WHERE clause) doesn\'t contain any values-- listing everything!');
+
+    // All docs
     dbOptions.include_docs = true;
-    db.list(dbOptions, listReplied);
-  } else if (queriedAttributes.length == 1 && (queriedAttributes[0] == 'id' || queriedAttributes[0] == '_id')) {
-    var id = options.where.id || options.where._id;
-
-    /// One doc by id
-    db.get(id, dbOptions, function(err, doc) {
-      if (err && err.status_code == 404) cb(null, []);
-      else if (err) cb(err);
-      else {
-        var docs;
-        if (doc) docs = [doc];
-        else docs = [];
-        cb(null, docs.map(docForReply));
+    // TODO: test if limit works?
+    // TODO: test if skip works?
+    // TODO: test if sort works?
+    db.list(dbOptions, function listReplied(err, docs) {
+      if (err) {
+        return cb(err);
       }
+
+      if (!Array.isArray(docs) && docs.rows) {
+        docs = docs.rows.map(prop('doc'));
+      }
+      else {}
+
+      // either way...
+      return cb(null, docs.map(docForReply));
     });
-  } else if (options.where.like) {
-    //console.log("Query by where: ",options.where.like);
-    var viewName = views.name(options.where.like);
-    var value = views.likeValue(options.where.like, true);
-    dbOptions.startkey = value.startkey;
-    dbOptions.endkey = value.endkey;
-    db.view('views', viewName, dbOptions, viewResult);
-  } else {
-    //console.log("Lets look with a view: ",options.where);
-    var viewName = views.name(options.where);
-    dbOptions.key = views.value(options.where);
-    db.view('views', viewName, dbOptions, viewResult);
+    return;
   }
 
-  function listReplied(err, docs) {
-    if (err) cb(err);
-    else {
-      if (!Array.isArray(docs) && docs.rows) docs = docs.rows.map(prop('doc'));
-      cb(null, docs.map(docForReply))
-    };
+
+  // Handle query for a single doc using the provided primary key criteria (e.g. `findOne()`)
+  if (queriedAttributes.length == 1 && (queriedAttributes[0] == 'id' || queriedAttributes[0] == '_id')) {
+    var id = criteria.where.id || criteria.where._id;
+
+    db.get(id, dbOptions, function(err, doc) {
+      if (err) {
+        if (err.status_code == 404) {
+          return cb(null, []);
+        }
+        return cb(err);
+      }
+      var docs = doc ? [doc] : [];
+      return cb(null, docs.map(docForReply));
+    });
+    return;
   }
 
-  function viewResult(err, reply) {
-    if (err && err.status_code == 404 && round < 1)
-      views.create(db, options.where.like || options.where, createdView);
-    else if (err) cb(err);
-    else cb(null, reply.rows.map(prop('value')).map(docForReply));
-  }
+  // Take a look at `criteria.where.like`...
+  asyncx_ifTruthy(criteria.where.like,
 
-  function createdView(err) {
-    if (err) cb(err);
-    else find.call(connectionName, connectionName, collectionName, options, cb, round + 1);
-  }
+    // Handle "like" modifier using a view
+    function ifSoDo(next){
+      var viewName = views.name(criteria.where.like);
+      var value = views.likeValue(criteria.where.like, true);
+      dbOptions.startkey = value.startkey;
+      dbOptions.endkey = value.endkey;
+      return db.view('views', viewName, dbOptions, next);
+    },
 
-};
+    // Handle general-case criteria queries using a view
+    function elseDo (next){
+      var viewName = views.name(criteria.where);
+      dbOptions.key = views.value(criteria.where);
+      return db.view('views', viewName, dbOptions, next);
+    },
+
+    function finallyDo(err, reply) {
+      if (err) {
+        if (err.status_code === 404 && round < 1) {
+          views.create(db, criteria.where.like || criteria.where, function createdView(err) {
+            if (err) {
+              return cb(err);
+            }
+            find.call(connectionName, connectionName, collectionName, criteria, cb, round + 1);
+          });
+          return;
+        }
+
+        return cb(err);
+      }
+
+      return cb(null, reply.rows.map(prop('value')).map(docForReply));
+    }
+  );
+
+
+}
 
 
 /**
@@ -498,7 +519,7 @@ adapter.merge = function adapterMerge(connectionName, collectionName, id, attrs,
   function saved(err, reply) {
     if (err && err.status_code == 409) {
       //console.log('Calling merge again!');
-      adapter.merge(connectionName, collectionName, id, attrs, cb, attempts + 1)
+      adapter.merge(connectionName, collectionName, id, attrs, cb, attempts + 1);
     }
     else if (err) cb(err);
     else {
@@ -616,5 +637,19 @@ function docForIngestion(doc) {
   }
 
   return doc;
+}
+
+
+
+/**
+ * Branch to the appropriate fn if the provided value is truthy.
+ *
+ * @param  {*} valToTest
+ * @param  {Function} ifSoDo(next)
+ * @param  {Function} elseDo(next)
+ * @param  {Function} finallyDo(err, results)
+ */
+function asyncx_ifTruthy (valToTest, ifSoDo, elseDo, finallyDo){
+  return (valToTest ? ifSoDo : elseDo)(finallyDo);
 }
 

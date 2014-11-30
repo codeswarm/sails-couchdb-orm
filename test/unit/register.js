@@ -1,36 +1,40 @@
 /**
  * Test dependencies
  */
-var adapter  = require('../../');
+var adapter = require('../../');
 var registry = require('../../registry');
-var assert   = require('assert');
+var assert = require('assert');
 
 
-describe('registerCollection', function () {
+describe('registerConnection', function() {
 
-	it('should not hang or encounter any errors', function (done) {
-		adapter.registerCollection({
-			identity: 'foo',
+  it('should not hang or encounter any errors', function(done) {
+    adapter.registerConnection({
+      identity: 'public npm registry',
       adapter: {
         config: {}
+      },
+      host: 'registry.npmjs.org',
+      port: 80
+    }, {
+      registry: {
+        identity: 'registry'
       }
-		}, cb);
+    }, cb);
 
     function cb(err) {
-      if (err) throw err;
-
-      assert.ok(registry.db('foo'));
-
-      assert.ok(registry.collection('foo'));
+      if (err) {
+        return done(err);
+      }
 
       done();
     }
 
-	});
+  });
 
 
-	// e.g.
-	// it('should create a mysql connection pool', function () {})
-	// it('should create an HTTP connection pool', function () {})
-	// ... and so on.
+  // e.g.
+  // it('should create a mysql connection pool', function () {})
+  // it('should create an HTTP connection pool', function () {})
+  // ... and so on.
 });
