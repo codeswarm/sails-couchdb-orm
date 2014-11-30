@@ -18,7 +18,44 @@ Add this module to your sails.js project:
 $ npm install sails-couchdb-orm --save
 ```
 
+Example entry in `config/connections.js`:
+
+```json
+couch: {                                                                       
+  adapter: 'sails-couchdb-orm',
+  host: 'localhost',
+  port: 5984,
+  username: 'myuser',
+  password: 'mypassword'                                 
+}
+```
+
 ## Use
+
+Example use in a model `models/MyModel.js`, specifying the adapter defined above:
+
+```javascript
+module.exports = {
+  adapter: 'couch',
+  migrate: 'safe',
+  id: {
+    primaryKey: true,
+    type: 'string'
+  },
+  attributes: {
+    name: 'string',
+    //...
+  }
+}
+```
+
+Or set "couch" as the default adapter for all models, inside `config/models.js`:
+
+```javascript
+module.exports.models = {
+  connection: 'couch'
+};
+```
 
 ### Class methods
 
