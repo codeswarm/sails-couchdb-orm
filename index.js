@@ -92,7 +92,7 @@ adapter.registerConnection = function registerConnection(connection, collections
     adapter.registerSingleCollection(connection, modelIdentity, collections[modelIdentity], next);
   }, function afterAsyncEach (err) {
     if(err) {
-      return cb(new Error("Problem when registering Collections"));
+      return cb(new Error(err.description));
     }
 
     return cb();
@@ -109,6 +109,7 @@ adapter.registerConnection = function registerConnection(connection, collections
  * @return {[type]}              [description]
  */
 adapter.registerSingleCollection = function registerCollection(connection, collectionName, collection, cb) {
+  collectionName = sanitizeCollectionName(collectionName);
 
   var url = urlForConfig(connection);
 
@@ -173,6 +174,7 @@ adapter.teardown = function teardown(connection, cb) {
  * @return {[type]}                  [description]
  */
 adapter.describe = function describe(connection, collectionName, cb) {
+  collectionName = sanitizeCollectionName(collectionName);
   var collection = registry.collection(collectionName);
   if (! collection)
     return cb(new Error('no such collection'));
@@ -193,6 +195,7 @@ adapter.describe = function describe(connection, collectionName, cb) {
  * @return {[type]}                  [description]
  */
 adapter.drop = function drop(connectionName, collectionName, relations, cb) {
+  collectionName = sanitizeCollectionName(collectionName);
   var connection = registry.connection(connectionName);
   var url = urlForConfig(connection);
   var db = nano(url);
@@ -218,6 +221,7 @@ adapter.drop = function drop(connectionName, collectionName, relations, cb) {
 adapter.find = find;
 
 function find(connectionName, collectionName, criteria, cb, round) {
+  collectionName = sanitizeCollectionName(collectionName);
   if ('number' != typeof round) round = 0;
 
   // If you need to access your private data for this collection:
@@ -344,6 +348,7 @@ function find(connectionName, collectionName, criteria, cb, round) {
  * @return {[type]}                  [description]
  */
 adapter.create = function create(connectionName, collectionName, values, cb) {
+  collectionName = sanitizeCollectionName(collectionName);
 
   var db = registry.db(collectionName);
   db.insert(docForIngestion(values), replied);
@@ -371,6 +376,7 @@ adapter.create = function create(connectionName, collectionName, values, cb) {
  * @return {[type]}                  [description]
  */
 adapter.update = function update(connectionName, collectionName, options, values, cb) {
+  collectionName = sanitizeCollectionName(collectionName);
 
   var searchAttributes = Object.keys(options.where);
   if (searchAttributes.length != 1)
@@ -411,6 +417,7 @@ adapter.update = function update(connectionName, collectionName, options, values
  * @return {[type]}                  [description]
  */
 adapter.destroy = function destroy(connectionName, collectionName, options, cb) {
+  collectionName = sanitizeCollectionName(collectionName);
   var db = registry.db(collectionName);
 
   // Find the record
@@ -433,6 +440,7 @@ adapter.destroy = function destroy(connectionName, collectionName, options, cb) 
 /// Authenticate
 
 adapter.authenticate = function authenticate(connection, collectionName, username, password, cb) {
+  collectionName = sanitizeCollectionName(collectionName);
   var db = registry.db(collectionName);
 
   db.auth(username, password, replied);
@@ -452,6 +460,7 @@ adapter.authenticate = function authenticate(connection, collectionName, usernam
 /// Session
 
 adapter.session = function session(connection, collectionName, sid, cb) {
+  collectionName = sanitizeCollectionName(collectionName);
   var url = urlForConfig(registry.connection(connection));
 
   var sessionDb = nano({
@@ -467,6 +476,7 @@ adapter.session = function session(connection, collectionName, sid, cb) {
 /// Merge
 
 adapter.merge = function adapterMerge(connectionName, collectionName, id, attrs, cb, attempts) {
+  collectionName = sanitizeCollectionName(collectionName);
   var doc;
   var db = registry.db(collectionName);
 
@@ -545,6 +555,7 @@ adapter.merge = function adapterMerge(connectionName, collectionName, id, attrs,
 /// View
 
 adapter.view = function view(connectionName, collectionName, viewName, options, cb, round) {
+  collectionName = sanitizeCollectionName(collectionName);
   if ('number' != typeof round) round = 0;
   var db = registry.db(collectionName);
 
@@ -564,6 +575,7 @@ adapter.view = function view(connectionName, collectionName, viewName, options, 
 };
 
 function populateView(connectionName, collectionName, viewName, cb) {
+  collectionName = sanitizeCollectionName(collectionName);
   var collection = registry.collection(collectionName);
 
   var view = collection.views && collection.views[viewName];
@@ -653,3 +665,9 @@ function asyncx_ifTruthy (valToTest, ifSoDo, elseDo, finallyDo){
   return (valToTest ? ifSoDo : elseDo)(finallyDo);
 }
 
+function sanitizeCollectionName (collectionName) {
+  return collectionName.replace(/([A-Z])/g, function (c) {
+    return c.toLowerCase();
+  });
+
+}
