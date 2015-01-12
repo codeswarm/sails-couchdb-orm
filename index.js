@@ -424,7 +424,7 @@ adapter.destroy = function destroy(connectionName, collectionName, options, cb) 
   adapter.find(connectionName,collectionName,options, function(err,docs) {
     async.each(docs,function(item) { // Shoud have only one.
       db.destroy(item.id, item.rev, function(err, doc) {
-        cb(err,[doc]); // Waterline expects an array as result.
+        cb(err,[item]); // Waterline expects an array as result.
       });
     });
   });
